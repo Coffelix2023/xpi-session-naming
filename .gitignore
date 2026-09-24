@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.next/
+__pycache__/
+.venv/
+coverage/
+
+# c6x-config
+**/fast-fixes/
