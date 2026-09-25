@@ -13,7 +13,7 @@
 
 ## Why
 
-Every session you open starts untitled, so a day of work leaves a list of indistinguishable entries and the conversation you had an hour ago is unreachable. This extension names a session the moment its first real exchange settles — e.g. `[deepseek-v4.1-flash] - 订阅页埋点梳理` — then gets out of the way. It watches the `agent_settled` event, decides whether the turn was worth naming, asks one isolated `mimo-v2.6-flash` completion for a topic, validates the answer, and writes the name exactly once. A manual rename always wins, a failure never disturbs the conversation, and the session's active model is never touched.
+Every session you open starts untitled, so a day of work leaves a list of indistinguishable entries and the conversation you had an hour ago is unreachable. This extension names a session the moment its first real exchange settles — e.g. `[deepseek-v4.1-flash] - 订阅页埋点梳理` — then gets out of the way. It watches the `agent_settled` event, decides whether the turn was worth naming, asks one isolated completion on the configured topic model (default `mimo-v2.6-flash`) for a topic, validates the answer, and writes the name exactly once. A manual rename always wins, a failure never disturbs the conversation, and the session's active model is never touched.
 
 Every extension in this repository starts from the same four rules:
 
@@ -60,16 +60,27 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 | Command | Description |
 | --- | --- |
 | `/xpi-session-naming` | Show the extension status and the loaded version |
+| `/xpi-session-naming-model` | Pick the model that names sessions, from the same list as `/model-name` |
 
 ### How a session gets named
 
 - **Trigger** — every completed user turn (`agent_settled`). A meaningful first turn (more than 10 code points, slash commands excluded) names the session immediately; a trivial first turn (`hello`, `/command`) waits for the second completed turn.
 - **Name format** — `[<primary-model-id>] - <topic>`. The provider prefix of the model id is stripped; the topic is a validated single-line Simplified Chinese phrase (requested ≤ 20 characters, accepted ≤ 30).
-- **Topic model** — one bounded completion on `mimo-v2.6-flash` (provider `MIMO` first, then any configured provider exposing the same model id), 15s timeout, carrying only the first two user messages (500 code points each). No usable topic model means the session simply stays unnamed.
+- **Topic model** — one bounded completion on the model chosen with `/xpi-session-naming-model`, defaulting to `mimo-v2.6-flash` (provider `MIMO` first, then any configured provider exposing the same model id), 15s timeout, carrying only the first two user messages (500 code points each). A stored choice wins only while its provider still exists and has configured auth; otherwise the default chain runs, and no usable topic model means the session simply stays unnamed.
 - **Guards** — an existing name is never overwritten (checked before and after the model call), only one attempt runs at a time, and the topic model is invoked through `ctx.modelRegistry.streamSimple()`, so generating a name can neither switch the conversation's model nor touch settings.
 - **Failure boundary** — every failure is returned as data and reported with a short `ctx.ui.notify` warning that contains neither prompt nor topic text; unexpected exceptions are swallowed. Naming never blocks or alters the conversation.
 
 Reads: the current branch's message entries and the session name. Writes: the session name, and only when there is none yet.
+
+### Configuration
+
+`/xpi-session-naming-model` writes `<agent-dir>/xpi-session-naming.json` (default `~/.pi/agent/xpi-session-naming.json`):
+
+```json
+{ "topicModel": { "provider": "MIMO", "id": "mimo-v2.6-flash" } }
+```
+
+A missing, unreadable, or malformed file means "no choice", and naming falls back to the default chain. The file holds a provider/model-id reference only — no credential ever lands there. The choice is re-read on every turn, so picking a model applies to the next turn without `/reload`.
 
 ## Development
 
@@ -111,7 +122,9 @@ ln -s "$(pwd)" ~/.pi/agent/extensions/xpi-session-naming   # live loop: /reload 
     ├── naming-eligibility.ts  # Turn classification and naming decision
     ├── session-name.ts        # `[model-id] - topic` composition
     ├── topic-model.ts         # Isolated topic completion via `ctx.modelRegistry`
+    ├── topic-model-config.ts  # `<agent-dir>/xpi-session-naming.json` read/write
     ├── topic-text.ts          # Prompt construction and topic validation
+    ├── ui/                    # `ctx.ui` components (`model-picker.ts` for the picker)
     └── *.test.ts              # Vitest coverage for each module above
 ```
 
