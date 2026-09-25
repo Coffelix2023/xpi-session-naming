@@ -1,19 +1,26 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import xpiSessionNaming from "./index.ts";
 import { fakeRegistry } from "./test-registry.ts";
 import { TOPIC_MODEL_ID, type TopicModelRegistry } from "./topic-model.ts";
+import { topicModelConfigPath } from "./topic-model-config.ts";
 
 type Handler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
 
 const AT = "2026-01-01T00:00:00.000Z";
+const CHOSEN_MODEL_ID = "deepseek-v4.1-pro";
+const CHOSEN_MODEL_PROVIDER = "CMD-PRO";
 const PRIMARY_MODEL_ID = "deepseek-v4.1-flash";
 const MEANINGFUL_REQUEST = "登录失败".repeat(3);
 
-/** Minimal mock pi: captures hooks and the session-name calls the wiring makes. */
+/** Minimal mock pi: captures commands, hooks, and the session-name calls. */
 function mockPi() {
   const hooks = new Map<string, Handler>();
+  const commands: string[] = [];
   const setNames: string[] = [];
   let sessionName: string | undefined;
   const api = {
@@ -21,7 +28,9 @@ function mockPi() {
     on: (event: string, handler: Handler) => {
       hooks.set(event, handler);
     },
-    registerCommand: () => undefined,
+    registerCommand: (name: string) => {
+      commands.push(name);
+    },
     setSessionName: (name: string) => {
       sessionName = name;
       setNames.push(name);
@@ -29,6 +38,7 @@ function mockPi() {
   };
   return {
     api,
+    commands,
     hooks,
     sessionName: () => sessionName,
     setNames,
@@ -108,6 +118,37 @@ function load() {
   };
 }
 
+let agentDirs: string[] = [];
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+
+afterEach(() => {
+  for (const dir of agentDirs) {
+    rmSync(dir, {
+      force: true,
+      recursive: true,
+    });
+  }
+  agentDirs = [];
+  if (previousAgentDir === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  }
+});
+
+/**
+ * Point `getAgentDir()` at a throwaway directory, optionally seeded with a
+ * `xpi-session-naming.json`. Nothing in this suite touches the real agent dir.
+ */
+function useAgentDir(config?: string): void {
+  const dir = mkdtempSync(join(tmpdir(), "xpi-naming-agent-"));
+  agentDirs.push(dir);
+  if (config !== undefined) {
+    writeFileSync(topicModelConfigPath(dir), config, "utf8");
+  }
+  process.env.PI_CODING_AGENT_DIR = dir;
+}
+
 describe("xpiSessionNaming wiring", () => {
   it("registers a single agent_settled hook", () => {
     const pi = load();
@@ -115,6 +156,106 @@ describe("xpiSessionNaming wiring", () => {
       ...pi.hooks.keys(),
     ]).toEqual([
       "agent_settled",
+    ]);
+  });
+
+  it("registers the status command and the naming-model command", () => {
+    const pi = load();
+    expect(pi.commands).toEqual([
+      "xpi-session-naming",
+      "xpi-session-naming-model",
+    ]);
+  });
+
+  it("names with the model stored by /xpi-session-naming-model", async () => {
+    useAgentDir(
+      JSON.stringify({
+        topicModel: {
+          id: CHOSEN_MODEL_ID,
+          provider: CHOSEN_MODEL_PROVIDER,
+        },
+      }),
+    );
+    const pi = load();
+    const { registry, requested } = fakeRegistry({
+      extraModel: {
+        id: CHOSEN_MODEL_ID,
+        provider: CHOSEN_MODEL_PROVIDER,
+      },
+    });
+
+    await pi.handler("agent_settled")(
+      {
+        type: "agent_settled",
+      },
+      mockCtx({
+        modelId: PRIMARY_MODEL_ID,
+        branch: [
+          userEntry("u1", MEANINGFUL_REQUEST),
+          assistantEntry("a1"),
+        ],
+        registry,
+      }),
+    );
+
+    expect(requested).toEqual([
+      CHOSEN_MODEL_ID,
+    ]);
+    expect(pi.sessionName()).toBe(`[${PRIMARY_MODEL_ID}] - 登录失败排查`);
+  });
+
+  it("falls back to the default topic model when the stored one is gone", async () => {
+    useAgentDir(
+      JSON.stringify({
+        topicModel: {
+          id: "removed-model",
+          provider: "REMOVED",
+        },
+      }),
+    );
+    const pi = load();
+    const { registry, requested } = fakeRegistry();
+
+    await pi.handler("agent_settled")(
+      {
+        type: "agent_settled",
+      },
+      mockCtx({
+        modelId: PRIMARY_MODEL_ID,
+        branch: [
+          userEntry("u1", MEANINGFUL_REQUEST),
+          assistantEntry("a1"),
+        ],
+        registry,
+      }),
+    );
+
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
+    ]);
+  });
+
+  it("names with the default topic model when no preference is stored", async () => {
+    useAgentDir();
+    const pi = load();
+    const { registry, requested } = fakeRegistry();
+
+    await pi.handler("agent_settled")(
+      {
+        type: "agent_settled",
+      },
+      mockCtx({
+        modelId: PRIMARY_MODEL_ID,
+        branch: [
+          userEntry("u1", MEANINGFUL_REQUEST),
+          assistantEntry("a1"),
+        ],
+        registry,
+      }),
+    );
+
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
     ]);
   });
 
