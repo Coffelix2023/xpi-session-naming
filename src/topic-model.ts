@@ -1,5 +1,6 @@
 /**
- * Topic-model adapter: exactly one isolated `mimo-v2.6-flash` completion.
+ * Topic-model adapter: exactly one isolated completion on the configured topic
+ * model, defaulting to `mimo-v2.6-flash`.
  *
  * Invocation path: `ctx.modelRegistry.streamSimple()` — the provider-neutral
  * nested-call path documented in Pi's extension guide. No subprocess, so there
@@ -12,7 +13,7 @@
  */
 import type { Api, AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
-
+import type { TopicModelPreference } from "./topic-model-config.ts";
 export const TOPIC_MODEL_ID = "mimo-v2.6-flash";
 /** MIMO is this model's native endpoint; other providers are only a fallback. */
 export const TOPIC_MODEL_PROVIDERS = [
@@ -29,18 +30,29 @@ export type TopicModelRegistry = Pick<
 >;
 
 export interface GenerateTopicOptions {
+  /** User-selected model; ignored when it cannot be resolved or has no auth. */
+  preference?: TopicModelPreference;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
 
 /**
- * Preferred provider first, then any configured provider exposing the same
- * model id. `undefined` means "no usable topic model": the caller leaves the
- * session unnamed instead of failing the turn.
+ * The user's choice first — but only when that provider exists and has
+ * configured auth. Otherwise the built-in chain: preferred provider first,
+ * then any configured provider exposing the same model id. `undefined` means
+ * "no usable topic model": the caller leaves the session unnamed instead of
+ * failing the turn.
  */
 export function resolveTopicModel(
   registry: TopicModelRegistry,
+  preference?: TopicModelPreference,
 ): Model<Api> | undefined {
+  if (preference) {
+    const chosen = registry.find(preference.provider, preference.id);
+    if (chosen && registry.hasConfiguredAuth(chosen)) {
+      return chosen;
+    }
+  }
   for (const provider of TOPIC_MODEL_PROVIDERS) {
     const model = registry.find(provider, TOPIC_MODEL_ID);
     if (model && registry.hasConfiguredAuth(model)) {
@@ -59,7 +71,7 @@ export async function generateTopic(
   context: Context,
   options: GenerateTopicOptions = {},
 ): Promise<string | undefined> {
-  const model = resolveTopicModel(registry);
+  const model = resolveTopicModel(registry, options.preference);
   if (!model) {
     return undefined;
   }

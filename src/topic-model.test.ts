@@ -99,6 +99,43 @@ function createRegistry(options: {
   };
 }
 
+/** Registry over explicit provider/model pairs, so a stored preference can be exercised. */
+function multiModelRegistry(
+  entries: {
+    id: string;
+    provider: string;
+  }[],
+  configured: string[],
+): {
+  calls: Model<Api>[];
+  registry: TopicModelRegistry;
+} {
+  const faux = fauxProvider({
+    models: entries.map((entry) => ({
+      id: entry.id,
+    })),
+    provider: entries[0]?.provider ?? "MIMO",
+  });
+  const models: Model<Api>[] = entries.map(
+    (entry, index) => Object.assign({}, faux.models[index], entry) as Model<Api>,
+  );
+  const auth = new Set(configured);
+  const calls: Model<Api>[] = [];
+  return {
+    calls,
+    registry: {
+      find: (provider, modelId) =>
+        models.find((m) => m.provider === provider && m.id === modelId),
+      getAvailable: () => models.filter((m) => auth.has(m.provider)),
+      hasConfiguredAuth: (model) => auth.has(model.provider),
+      streamSimple: (model) => {
+        calls.push(model);
+        return streamOf(fauxAssistantMessage("登录失败排查"));
+      },
+    },
+  };
+}
+
 describe("resolveTopicModel", () => {
   it("prefers the configured MIMO provider", () => {
     const { registry } = createRegistry({
@@ -131,6 +168,73 @@ describe("resolveTopicModel", () => {
       ],
     });
     expect(resolveTopicModel(registry)).toBeUndefined();
+  });
+});
+
+describe("resolveTopicModel with a stored preference", () => {
+  const CHOSEN = {
+    id: "deepseek-v4.1-flash",
+    provider: "CMD-PRO",
+  };
+  const CATALOGUE = [
+    CHOSEN,
+    {
+      id: TOPIC_MODEL_ID,
+      provider: "MIMO",
+    },
+  ];
+
+  it("uses the chosen model when it resolves and has auth", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+
+    expect(resolveTopicModel(registry, CHOSEN)).toMatchObject(CHOSEN);
+  });
+
+  it("falls back to the default chain when the chosen provider has no auth", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "MIMO",
+    ]);
+
+    expect(resolveTopicModel(registry, CHOSEN)?.provider).toBe("MIMO");
+  });
+
+  it("falls back to the default chain when the chosen model was removed", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+
+    expect(
+      resolveTopicModel(registry, {
+        id: "removed-model",
+        provider: "CMD-PRO",
+      })?.provider,
+    ).toBe("MIMO");
+  });
+
+  it("keeps the default chain when no preference is stored", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+
+    expect(resolveTopicModel(registry)?.provider).toBe("MIMO");
+  });
+
+  it("routes the completion to the chosen model", async () => {
+    const { calls, registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+
+    await generateTopic(registry, CONTEXT, {
+      preference: CHOSEN,
+    });
+
+    expect(calls[0]).toMatchObject(CHOSEN);
   });
 });
 

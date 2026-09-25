@@ -18,26 +18,56 @@ export const DEFAULT_TOPIC = "登录失败排查";
  * resolving as error messages) is covered in `topic-model.test.ts`.
  */
 export function ready(message: AssistantMessage): AssistantMessageEventStream {
+  // SAFETY: the adapter only ever awaits `result()`; every other member of the
+  // event-stream surface is exercised against the real stream in
+  // `topic-model.test.ts`, so this stub never has to be a full stream.
   return {
     result: async () => message,
   } as unknown as AssistantMessageEventStream;
 }
 
 export function fakeRegistry(
-  options: { available?: boolean; throwOnResolve?: boolean; topic?: string } = {},
+  options: {
+    available?: boolean;
+    /** A second, non-default model the registry can also resolve. */
+    extraModel?: {
+      id: string;
+      provider: string;
+    };
+    throwOnResolve?: boolean;
+    topic?: string;
+  } = {},
 ): {
   registry: TopicModelRegistry;
   requested: string[];
 } {
   const available = options.available ?? true;
-  const models: Model<string>[] = fauxProvider({
+  const entries: {
+    id: string;
+    provider: string;
+  }[] = [
+    {
+      id: TOPIC_MODEL_ID,
+      provider: "MIMO",
+    },
+    ...(options.extraModel
+      ? [
+          options.extraModel,
+        ]
+      : []),
+  ];
+  const faux = fauxProvider({
+    models: entries.map((entry) => ({
+      id: entry.id,
+    })),
     provider: "MIMO",
-    models: [
-      {
-        id: TOPIC_MODEL_ID,
-      },
-    ],
-  }).models;
+  });
+  const models: Model<string>[] = entries.map(
+    (entry, index) =>
+      Object.assign({}, faux.models[index], {
+        provider: entry.provider,
+      }) as Model<string>,
+  );
   const requested: string[] = [];
   return {
     requested,
@@ -46,8 +76,8 @@ export function fakeRegistry(
         if (options.throwOnResolve) {
           throw new Error("registry unavailable");
         }
-        return available && provider === "MIMO"
-          ? models.find((m) => m.id === modelId)
+        return available
+          ? models.find((model) => model.provider === provider && model.id === modelId)
           : undefined;
       },
       getAvailable: () => {

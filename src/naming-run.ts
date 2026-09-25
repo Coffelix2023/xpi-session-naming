@@ -14,6 +14,7 @@ import {
 } from "./naming-eligibility.ts";
 import { bareModelId, composeSessionName } from "./session-name.ts";
 import { generateTopic, type TopicModelRegistry } from "./topic-model.ts";
+import type { TopicModelPreference } from "./topic-model-config.ts";
 import { buildTopicPrompt, normalizeTopic } from "./topic-text.ts";
 
 export interface NamingRequest {
@@ -21,6 +22,8 @@ export interface NamingRequest {
   getSessionName(): string | undefined;
   /** Primary conversation model id; it becomes the name prefix. */
   modelId: string | undefined;
+  /** Chosen by `/xpi-session-naming-model`; absent means the default chain. */
+  preference?: TopicModelPreference;
   registry: TopicModelRegistry;
   setSessionName(name: string): void;
 }
@@ -80,6 +83,9 @@ export function createNamer(): MaybeNameSession {
       const raw = await generateTopic(
         request.registry,
         topicContext(buildTopicPrompt(userTexts)),
+        {
+          preference: request.preference,
+        },
       );
       const topic = raw === undefined ? undefined : normalizeTopic(raw);
       if (topic === undefined) {
