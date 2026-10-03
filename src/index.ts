@@ -9,7 +9,7 @@ import { resolveTopicModel } from "./topic-model.ts";
 import { readTopicModelConfig, writeTopicModelConfig } from "./topic-model-config.ts";
 import { ModelPicker, modelLabel } from "./ui/model-picker.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const MODEL_COMMAND = "xpi-session-naming-model";
 const MODELS_SUBCOMMAND = "models";
 export default function xpiSessionNaming(pi: ExtensionAPI): void {
