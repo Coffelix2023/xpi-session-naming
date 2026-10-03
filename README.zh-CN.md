@@ -14,7 +14,7 @@
 
 ## 为什么
 
-新开的会话没有名字, 一天工作下来列表里全是无法区分的条目, 一小时前聊过什么根本找不到。本扩展在首轮有效对话结束的那一刻给会话命名 —— 例如 `[deepseek-v4.1-flash] - 订阅页埋点梳理` —— 然后就退场。它监听 `agent_settled` 事件, 判断这一轮是否值得命名, 用一次隔离的补全生成主题(默认模型 `mimo-v2.6-flash`, 可经 `/xpi-session-naming-model` 更换), 校验后再写入, 且只写一次。手动重命名永远优先, 失败绝不打扰对话, 会话当前使用的模型也从不被触碰。
+新开的会话没有名字, 一天工作下来列表里全是无法区分的条目, 一小时前聊过什么根本找不到。本扩展在首轮有效对话结束的那一刻给会话命名 —— 例如 `[deepseek-v4.1-flash] - 订阅页埋点梳理` —— 然后就退场。它监听 `agent_settled` 事件, 判断这一轮是否值得命名, 用一次隔离的补全生成主题(默认模型 `mimo-v2.6-flash`, 可经 `/xpi-session-naming models` 更换), 校验后再写入, 且只写一次。手动重命名永远优先, 失败绝不打扰对话, 会话当前使用的模型也从不被触碰。
 
 本仓库里的每个扩展都从同样四条规则出发:
 
@@ -61,13 +61,14 @@ pi remove git:github.com/<owner>/xpi-session-naming
 | 命令 | 说明 |
 | --- | --- |
 | `/xpi-session-naming` | 显示扩展状态与已加载的版本 |
-| `/xpi-session-naming-model` | 选择给会话命名的模型, 列表与 `/model-name` 一致 |
+| `/xpi-session-naming models` | 选择给会话命名的模型, 列表与 `/model-name` 一致 |
+| `/xpi-session-naming-model` | `/xpi-session-naming models` 的别名 |
 
 ### 会话如何被命名
 
 - **触发时机** —— 每个完成的用户回合(`agent_settled`)。首轮即是有意义的请求(超过 10 个码点, 排除斜杠命令)则立即命名; 首轮无意义(`hello`、`/command`)则等待第二个完成的回合。
 - **命名格式** —— `[<主模型 id>] - <主题>`。模型 id 前的 provider 前缀被去掉; 主题是校验过的单行简体中文短语(要求 ≤ 20 字, 接受 ≤ 30 字)。
-- **主题模型** —— 在 `/xpi-session-naming-model` 选定的模型上做一次有界补全, 默认 `mimo-v2.6-flash`(优先 provider `MIMO`, 其次是任何配置了同一模型 id 的 provider), 15 秒超时, 只携带前两条用户消息(各 500 码点)。已保存的选择仅在其 provider 仍存在且已配置认证时生效; 否则回退默认链路。没有可用的主题模型时, 会话保持未命名。
+- **主题模型** —— 在 `/xpi-session-naming models` 选定的模型上做一次有界补全, 默认 `mimo-v2.6-flash`(优先 provider `MIMO`, 其次是任何配置了同一模型 id 的 provider), 15 秒超时, 只携带前两条用户消息(各 500 码点)。已保存的选择仅在其 provider 仍存在且已配置认证时生效; 否则回退默认链路。没有可用的主题模型时, 会话保持未命名。
 - **护栏** —— 已有名字绝不覆盖(模型调用前后各检查一次), 同一时刻只允许一次尝试; 主题模型经 `ctx.modelRegistry.streamSimple()` 调用, 生成名字既不会切换对话模型, 也不会改动设置。
 - **失败边界** —— 所有失败以数据形式返回, 只用一条不含提示词与主题文本的 `ctx.ui.notify` 警告上报; 意外异常被吞掉。命名从不阻断、也从不改写对话。
 
@@ -75,7 +76,7 @@ pi remove git:github.com/<owner>/xpi-session-naming
 
 ### 配置
 
-`/xpi-session-naming-model` 写入 `<agent-dir>/xpi-session-naming.json`(默认 `~/.pi/agent/xpi-session-naming.json`):
+`/xpi-session-naming models` 写入 `<agent-dir>/xpi-session-naming.json`(默认 `~/.pi/agent/xpi-session-naming.json`):
 
 ```json
 { "topicModel": { "provider": "MIMO", "id": "mimo-v2.6-flash" } }

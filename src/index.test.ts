@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage } from "@earendil-works/pi-ai";
@@ -7,9 +7,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import xpiSessionNaming from "./index.ts";
 import { fakeRegistry } from "./test-registry.ts";
 import { TOPIC_MODEL_ID, type TopicModelRegistry } from "./topic-model.ts";
-import { topicModelConfigPath } from "./topic-model-config.ts";
+import { readTopicModelConfig, topicModelConfigPath } from "./topic-model-config.ts";
 
 type Handler = (event: unknown, ctx: unknown) => Promise<unknown> | unknown;
+type CommandHandler = (args: string, ctx: unknown) => Promise<unknown> | unknown;
 
 const AT = "2026-01-01T00:00:00.000Z";
 const CHOSEN_MODEL_ID = "deepseek-v4.1-pro";
@@ -21,6 +22,8 @@ const MEANINGFUL_REQUEST = "登录失败".repeat(3);
 function mockPi() {
   const hooks = new Map<string, Handler>();
   const commands: string[] = [];
+  const handlers = new Map<string, CommandHandler>();
+  const completions = new Map<string, (prefix: string) => unknown>();
   const setNames: string[] = [];
   let sessionName: string | undefined;
   const api = {
@@ -28,17 +31,35 @@ function mockPi() {
     on: (event: string, handler: Handler) => {
       hooks.set(event, handler);
     },
-    registerCommand: (name: string) => {
+    registerCommand: (
+      name: string,
+      options: {
+        getArgumentCompletions?: (prefix: string) => unknown;
+        handler: CommandHandler;
+      },
+    ) => {
       commands.push(name);
+      handlers.set(name, options.handler);
+      if (options.getArgumentCompletions) {
+        completions.set(name, options.getArgumentCompletions);
+      }
     },
     setSessionName: (name: string) => {
       sessionName = name;
       setNames.push(name);
     },
   };
+  function command(name: string): CommandHandler {
+    const registered = handlers.get(name);
+    expect(registered, `command ${name} registered`).toBeDefined();
+    return registered as CommandHandler;
+  }
+
   return {
     api,
+    command,
     commands,
+    completions,
     hooks,
     sessionName: () => sessionName,
     setNames,
@@ -75,6 +96,12 @@ function mockCtx(options: {
   hasUI?: boolean;
   modelId?: string | undefined;
   registry?: TopicModelRegistry;
+  mode?: string;
+  /** Value `ctx.ui.custom` resolves to; the picker itself is tested separately. */
+  pickedModel?: {
+    id: string;
+    provider: string;
+  } | null;
 }) {
   const notifies: {
     message: string;
@@ -82,6 +109,7 @@ function mockCtx(options: {
   }[] = [];
   return {
     hasUI: options.hasUI ?? true,
+    mode: options.mode ?? "tui",
     model:
       options.modelId === undefined
         ? undefined
@@ -90,10 +118,12 @@ function mockCtx(options: {
           },
     modelRegistry: options.registry ?? fakeRegistry().registry,
     notifies,
+    scopedModels: [],
     sessionManager: {
       getBranch: () => options.branch ?? [],
     },
     ui: {
+      custom: async () => options.pickedModel ?? null,
       notify: (message: string, type?: "info" | "warning" | "error") => {
         notifies.push({
           message,
@@ -140,13 +170,14 @@ afterEach(() => {
  * Point `getAgentDir()` at a throwaway directory, optionally seeded with a
  * `xpi-session-naming.json`. Nothing in this suite touches the real agent dir.
  */
-function useAgentDir(config?: string): void {
+function useAgentDir(config?: string): string {
   const dir = mkdtempSync(join(tmpdir(), "xpi-naming-agent-"));
   agentDirs.push(dir);
   if (config !== undefined) {
     writeFileSync(topicModelConfigPath(dir), config, "utf8");
   }
   process.env.PI_CODING_AGENT_DIR = dir;
+  return dir;
 }
 
 describe("xpiSessionNaming wiring", () => {
@@ -165,6 +196,91 @@ describe("xpiSessionNaming wiring", () => {
       "xpi-session-naming",
       "xpi-session-naming-model",
     ]);
+  });
+
+  it("picks the naming model through the `models` subcommand", async () => {
+    const dir = useAgentDir();
+    const pi = load();
+    const ctx = mockCtx({
+      pickedModel: {
+        id: CHOSEN_MODEL_ID,
+        provider: CHOSEN_MODEL_PROVIDER,
+      },
+    });
+
+    await pi.command("xpi-session-naming")("models", ctx);
+
+    expect(await readTopicModelConfig(dir)).toEqual({
+      preference: {
+        id: CHOSEN_MODEL_ID,
+        provider: CHOSEN_MODEL_PROVIDER,
+      },
+    });
+    expect(ctx.notifies).toEqual([
+      {
+        message: `命名模型已设为 ${CHOSEN_MODEL_ID}`,
+        type: "info",
+      },
+    ]);
+  });
+
+  it("keeps the stored preference when the picker is cancelled", async () => {
+    const stored = JSON.stringify({
+      topicModel: {
+        id: CHOSEN_MODEL_ID,
+        provider: CHOSEN_MODEL_PROVIDER,
+      },
+    });
+    const dir = useAgentDir(stored);
+    const pi = load();
+
+    await pi.command("xpi-session-naming")(
+      "models",
+      mockCtx({
+        pickedModel: null,
+      }),
+    );
+
+    expect(readFileSync(topicModelConfigPath(dir), "utf8")).toBe(stored);
+  });
+
+  it("reports the version status when the argument is empty", async () => {
+    const pi = load();
+    const ctx = mockCtx({});
+
+    await pi.command("xpi-session-naming")("  ", ctx);
+
+    expect(ctx.notifies).toHaveLength(1);
+    expect(ctx.notifies[0]?.type).toBeUndefined();
+    expect(ctx.notifies[0]?.message).toContain("loaded");
+  });
+
+  it("warns on an unknown subcommand", async () => {
+    const pi = load();
+    const ctx = mockCtx({});
+
+    await pi.command("xpi-session-naming")("bogus", ctx);
+
+    expect(ctx.notifies).toEqual([
+      {
+        message: '未知子命令 "bogus"，可用: models',
+        type: "warning",
+      },
+    ]);
+  });
+
+  it("completes `models` and nothing else", () => {
+    const pi = load();
+    const complete = pi.completions.get("xpi-session-naming");
+
+    expect(complete?.("m")).toEqual([
+      {
+        description: "Choose the model that names sessions",
+        label: "models",
+        value: "models",
+      },
+    ]);
+    expect(complete?.("x")).toBeNull();
   });
 
   it("names with the model stored by /xpi-session-naming-model", async () => {

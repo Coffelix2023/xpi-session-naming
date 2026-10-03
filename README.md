@@ -60,13 +60,14 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 | Command | Description |
 | --- | --- |
 | `/xpi-session-naming` | Show the extension status and the loaded version |
-| `/xpi-session-naming-model` | Pick the model that names sessions, from the same list as `/model-name` |
+| `/xpi-session-naming models` | Pick the model that names sessions, from the same list as `/model-name` |
+| `/xpi-session-naming-model` | Alias of `/xpi-session-naming models` |
 
 ### How a session gets named
 
 - **Trigger** — every completed user turn (`agent_settled`). A meaningful first turn (more than 10 code points, slash commands excluded) names the session immediately; a trivial first turn (`hello`, `/command`) waits for the second completed turn.
 - **Name format** — `[<primary-model-id>] - <topic>`. The provider prefix of the model id is stripped; the topic is a validated single-line Simplified Chinese phrase (requested ≤ 20 characters, accepted ≤ 30).
-- **Topic model** — one bounded completion on the model chosen with `/xpi-session-naming-model`, defaulting to `mimo-v2.6-flash` (provider `MIMO` first, then any configured provider exposing the same model id), 15s timeout, carrying only the first two user messages (500 code points each). A stored choice wins only while its provider still exists and has configured auth; otherwise the default chain runs, and no usable topic model means the session simply stays unnamed.
+- **Topic model** — one bounded completion on the model chosen with `/xpi-session-naming models`, defaulting to `mimo-v2.6-flash` (provider `MIMO` first, then any configured provider exposing the same model id), 15s timeout, carrying only the first two user messages (500 code points each). A stored choice wins only while its provider still exists and has configured auth; otherwise the default chain runs, and no usable topic model means the session simply stays unnamed.
 - **Guards** — an existing name is never overwritten (checked before and after the model call), only one attempt runs at a time, and the topic model is invoked through `ctx.modelRegistry.streamSimple()`, so generating a name can neither switch the conversation's model nor touch settings.
 - **Failure boundary** — every failure is returned as data and reported with a short `ctx.ui.notify` warning that contains neither prompt nor topic text; unexpected exceptions are swallowed. Naming never blocks or alters the conversation.
 
@@ -74,7 +75,7 @@ Reads: the current branch's message entries and the session name. Writes: the se
 
 ### Configuration
 
-`/xpi-session-naming-model` writes `<agent-dir>/xpi-session-naming.json` (default `~/.pi/agent/xpi-session-naming.json`):
+`/xpi-session-naming models` writes `<agent-dir>/xpi-session-naming.json` (default `~/.pi/agent/xpi-session-naming.json`):
 
 ```json
 { "topicModel": { "provider": "MIMO", "id": "mimo-v2.6-flash" } }
