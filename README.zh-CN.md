@@ -28,14 +28,14 @@
 ## 技术栈
 
 - [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/),版本锁定在 [`mise.toml`](./mise.toml)
-- [Pi Coding Agent](https://github.com/earendil-works/pi) —— 宿主本体、扩展 API 与 `@earendil-works/pi-tui`
+- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.0.2` —— 宿主本体、扩展 API 与 `@earendil-works/pi-tui`
 - TypeScript strict(`target: ES2024`,`module: NodeNext`)
 - [Biome](https://biomejs.dev/) 负责 lint 与格式化
 - [Vitest](https://vitest.dev/) 作为测试运行器
 
 ## 安装
 
-前置条件:一个可用的 Pi 安装。本包直接从源码加载,安装前不需要任何构建。
+前置条件:Pi `1.0.2` 或更高版本,且已可用。本包直接从源码加载,安装前不需要任何构建。在更早的 Pi 版本上模型选型器无法通过类型检查 —— 1.0.2 移除了 `TUI.queryTerminalBackgroundColor` 与 `TUI.queryTerminalColorScheme`。
 
 ```bash
 pi install git:github.com/<owner>/xpi-session-naming@<ref>

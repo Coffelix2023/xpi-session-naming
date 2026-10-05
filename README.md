@@ -27,14 +27,14 @@ It also stays inside its lane: an extension is a plugin loaded into the Pi main 
 ## Tech stack
 
 - [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/), versions pinned in [`mise.toml`](./mise.toml)
-- [Pi Coding Agent](https://github.com/earendil-works/pi) — the host, its extension API, and `@earendil-works/pi-tui`
+- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.0.2` — the host, its extension API, and `@earendil-works/pi-tui`
 - TypeScript strict (`target: ES2024`, `module: NodeNext`)
 - [Biome](https://biomejs.dev/) for lint and format
 - [Vitest](https://vitest.dev/) as the test runner
 
 ## Install
 
-Requires a working Pi installation. The package is loaded straight from source, so there is nothing to build first.
+Requires Pi `1.0.2` or newer, and a working Pi installation. The package is loaded straight from source, so there is nothing to build first. On older Pi releases the model picker does not compile, because 1.0.2 removed `TUI.queryTerminalBackgroundColor` and `TUI.queryTerminalColorScheme`.
 
 ```bash
 pi install git:github.com/<owner>/xpi-session-naming@<ref>
