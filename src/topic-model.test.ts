@@ -459,4 +459,23 @@ describe("generateTopic with candidates", () => {
       },
     });
   });
+
+  it("masks a credential-like token inside the provider message", async () => {
+    const secret = "k".repeat(48);
+    const { registry } = createRegistry({
+      respond: () =>
+        fauxAssistantMessage("", {
+          errorMessage: `invalid key ${secret}`,
+          stopReason: "error",
+        }),
+    });
+
+    await expect(generateTopic(registry, CONTEXT)).resolves.toEqual({
+      ok: false,
+      failure: {
+        detail: "invalid key [redacted]",
+        kind: "provider-error",
+      },
+    });
+  });
 });

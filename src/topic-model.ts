@@ -251,10 +251,17 @@ async function attemptTopic(
   }
 }
 
-/** Provider error text on one line and bounded, so a warning stays readable. */
+/** Anything this long without whitespace is treated as a credential and masked. */
+const SECRET_LIKE = /\S{32,}/g;
+
+/**
+ * Provider error text on one line and bounded, so a warning stays readable — and
+ * masked where it looks like a credential, since a provider can echo the request
+ * back inside its error body.
+ */
 function boundedDetail(raw: string | undefined): string {
   return [
-    ...(raw ?? "").replace(/\s+/g, " ").trim(),
+    ...(raw ?? "").replace(/\s+/g, " ").replace(SECRET_LIKE, "[redacted]").trim(),
   ]
     .slice(0, TOPIC_ERROR_MAX_CHARS)
     .join("");
