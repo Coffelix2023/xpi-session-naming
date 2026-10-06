@@ -21,8 +21,8 @@ const RENAME_COMMAND = "xpi-session-rename";
 export default function xpiSessionNaming(pi: ExtensionAPI): void {
   const maybeNameSession = createNamer();
   // `agent_settled` fires every turn, so an unrecoverable failure would repeat
-  // its warning forever; each failure kind is reported at most once per session.
-  const reportedFailures = new Set<NamingFailureReason>();
+  // its warning forever; each cause is reported once, keyed with its detail.
+  const reportedFailures = new Set<string>();
 
   pi.registerCommand("xpi-session-naming", {
     description: "Show xpi-session-naming status; `models` picks the naming model",
@@ -159,7 +159,7 @@ async function renameSession(
   args: string,
   ctx: ExtensionCommandContext,
 ): Promise<void> {
-  const name = args.trim();
+  const name = args.trim().replace(/\s+/g, " ");
   if (name.length > 0) {
     pi.setSessionName(name);
     ctx.ui.notify(`会话已重命名为 ${name}`, "info");
@@ -213,16 +213,22 @@ function reportRename(ctx: ExtensionCommandContext, outcome: NamingOutcome): voi
 function reportFailure(
   ctx: ExtensionContext,
   outcome: NamingOutcome,
-  reported: Set<NamingFailureReason>,
+  reported: Set<string>,
 ): void {
   if (outcome.status === "named") {
     reported.clear();
     return;
   }
-  if (outcome.status !== "failed" || !ctx.hasUI || reported.has(outcome.reason)) {
+  if (outcome.status !== "failed" || !ctx.hasUI) {
     return;
   }
-  reported.add(outcome.reason);
+  // Keyed on the cause *and* its detail: switching to another naming model
+  // names its own failure instead of staying silent for the rest of the session.
+  const key = `${outcome.reason}|${outcome.detail ?? ""}`;
+  if (reported.has(key)) {
+    return;
+  }
+  reported.add(key);
   ctx.ui.notify(failureText(outcome.reason, outcome.detail, true), "warning");
 }
 

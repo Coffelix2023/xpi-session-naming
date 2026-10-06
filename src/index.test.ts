@@ -479,12 +479,12 @@ describe("xpiSessionNaming wiring", () => {
       registry,
     });
 
-    await pi.command("xpi-session-rename")("  我的新会话名  ", ctx);
+    await pi.command("xpi-session-rename")("  我的\n新会话名  ", ctx);
 
-    expect(pi.sessionName()).toBe("我的新会话名");
+    expect(pi.sessionName()).toBe("我的 新会话名");
     expect(ctx.notifies).toEqual([
       {
-        message: "会话已重命名为 我的新会话名",
+        message: "会话已重命名为 我的 新会话名",
         type: "info",
       },
     ]);
@@ -541,6 +541,53 @@ describe("xpiSessionNaming wiring", () => {
         type: "warning",
       },
     ]);
+  });
+
+  it("reports a failure once per cause and detail", async () => {
+    useAgentDir();
+    const pi = load();
+    let detail = "first provider error";
+    const { registry } = fakeRegistry({
+      respond: () =>
+        fauxAssistantMessage("", {
+          errorMessage: detail,
+          stopReason: "error",
+        }),
+    });
+    const ctx = mockCtx({
+      modelId: PRIMARY_MODEL_ID,
+      branch: [
+        userEntry("u1", MEANINGFUL_REQUEST),
+        assistantEntry("a1"),
+      ],
+      registry,
+    });
+    const settle = pi.handler("agent_settled");
+
+    await settle(
+      {
+        type: "agent_settled",
+      },
+      ctx,
+    );
+    await settle(
+      {
+        type: "agent_settled",
+      },
+      ctx,
+    );
+    expect(ctx.notifies).toHaveLength(1);
+    expect(ctx.notifies[0]?.message).toContain("first provider error");
+
+    detail = "second provider error";
+    await settle(
+      {
+        type: "agent_settled",
+      },
+      ctx,
+    );
+    expect(ctx.notifies).toHaveLength(2);
+    expect(ctx.notifies[1]?.message).toContain("second provider error");
   });
 
   it("stays silent when the client has no UI", async () => {
