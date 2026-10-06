@@ -464,8 +464,7 @@ describe("xpiSessionNaming wiring", () => {
     expect(pi.sessionName()).toBeUndefined();
     expect(ctx.notifies).toEqual([
       {
-        // biome-ignore lint/security/noSecrets: user-facing message, not a credential
-        message: "当前模型信息不可用，未自动命名本次会话",
+        message: "当前模型信息不可用，会话名保持不变",
         type: "warning",
       },
     ]);

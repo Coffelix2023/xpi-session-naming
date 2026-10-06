@@ -1,4 +1,9 @@
-import { fauxAssistantMessage } from "@earendil-works/pi-ai";
+import {
+  type Api,
+  fauxAssistantMessage,
+  fauxProvider,
+  type Model,
+} from "@earendil-works/pi-ai";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 import { createNamer, type NamingRequest } from "./naming-run.ts";
@@ -62,6 +67,7 @@ describe("createNamer", () => {
     );
 
     expect(outcome).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: `[${PRIMARY_MODEL_ID}] - 登录失败排查`,
       status: "named",
     });
@@ -88,6 +94,7 @@ describe("createNamer", () => {
     );
 
     expect(outcome).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: "[deepseek-v4.1-flash] - 登录失败排查",
       status: "named",
     });
@@ -134,6 +141,7 @@ describe("createNamer", () => {
       }),
     );
     expect(afterSecond).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: `[${PRIMARY_MODEL_ID}] - 登录失败排查`,
       status: "named",
     });
@@ -196,6 +204,7 @@ describe("createNamer", () => {
     ]);
 
     expect(first).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: `[${PRIMARY_MODEL_ID}] - 登录失败排查`,
       status: "named",
     });
@@ -239,7 +248,7 @@ describe("createNamer", () => {
     );
 
     expect(outcome).toEqual({
-      reason: "no-topic",
+      reason: "no-topic-model",
       status: "failed",
     });
     expect(requested).toEqual([]);
@@ -259,7 +268,7 @@ describe("createNamer", () => {
     );
 
     expect(outcome).toEqual({
-      reason: "no-topic",
+      reason: "topic-rejected",
       status: "failed",
     });
     expect(names).toEqual([]);
@@ -312,5 +321,65 @@ describe("createNamer", () => {
     expect(requested).toEqual([
       TOPIC_MODEL_ID,
     ]);
+  });
+
+  it("retries on the primary model when the topic model refuses", async () => {
+    const fallback = Object.assign({}, fauxProvider().models[0], {
+      id: PRIMARY_MODEL_ID,
+      provider: "CMD-PRO",
+    }) as Model<Api>;
+    const { registry, requested } = fakeRegistry({
+      respond: (model) =>
+        model.provider === "CMD-PRO"
+          ? fauxAssistantMessage("登录失败排查")
+          : fauxAssistantMessage("", {
+              errorMessage: "Space Bunny Alpha is no longer available",
+              stopReason: "error",
+            }),
+    });
+    const names: string[] = [];
+
+    const outcome = await createNamer()(
+      request({
+        fallback,
+        registry,
+        setSessionName: (name) => names.push(name),
+      }),
+    );
+
+    expect(outcome).toEqual({
+      model: `CMD-PRO/${PRIMARY_MODEL_ID}`,
+      name: `[${PRIMARY_MODEL_ID}] - 登录失败排查`,
+      status: "named",
+    });
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
+      PRIMARY_MODEL_ID,
+    ]);
+    expect(names).toEqual([
+      `[${PRIMARY_MODEL_ID}] - 登录失败排查`,
+    ]);
+  });
+
+  it("surfaces the provider message when no candidate answers", async () => {
+    const { registry } = fakeRegistry({
+      respond: () =>
+        fauxAssistantMessage("", {
+          errorMessage: "Space Bunny Alpha is no longer available",
+          stopReason: "error",
+        }),
+    });
+
+    const outcome = await createNamer()(
+      request({
+        registry,
+      }),
+    );
+
+    expect(outcome).toEqual({
+      detail: "Space Bunny Alpha is no longer available",
+      reason: "topic-error",
+      status: "failed",
+    });
   });
 });

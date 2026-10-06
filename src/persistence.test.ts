@@ -6,6 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNamer, type NamingRequest } from "./naming-run.ts";
 import { DEFAULT_TOPIC, fakeRegistry } from "./test-registry.ts";
+import { TOPIC_MODEL_ID } from "./topic-model.ts";
 
 const PRIMARY_MODEL_ID = "deepseek-v4.1-flash";
 const MEANINGFUL_REQUEST = "登录失败".repeat(3);
@@ -73,6 +74,7 @@ describe("session name persistence", () => {
       sessionRequest(manager, fakeRegistry().registry),
     );
     expect(outcome).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: expected,
       status: "named",
     });
@@ -111,6 +113,7 @@ describe("session name persistence", () => {
     const outcome = await createNamer()(sessionRequest(reopened, registry));
 
     expect(outcome).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
       name: `[${PRIMARY_MODEL_ID}] - ${DEFAULT_TOPIC}`,
       status: "named",
     });

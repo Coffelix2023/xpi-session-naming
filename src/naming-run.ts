@@ -4,21 +4,31 @@
  * Everything the attempt needs is passed in, so the caller owns lifecycle and
  * session APIs while this module owns the guards: an existing name (checked
  * before and after the model call, so a manual rename always wins) and a single
- * in-flight attempt. Failures are returned, never thrown.
+ * in-flight attempt.
+ *
+ * Failures are returned with their cause, never thrown, and the only text a
+ * failure carries is the provider's own error message — never prompt or topic
+ * text.
  */
-import type { Context } from "@earendil-works/pi-ai";
+import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import {
   type BranchEntry,
   completedUserTexts,
   namingDecision,
 } from "./naming-eligibility.ts";
 import { bareModelId, composeSessionName } from "./session-name.ts";
-import { generateTopic, type TopicModelRegistry } from "./topic-model.ts";
+import {
+  generateTopic,
+  type TopicFailure,
+  type TopicModelRegistry,
+} from "./topic-model.ts";
 import type { TopicModelPreference } from "./topic-model-config.ts";
 import { buildTopicPrompt, normalizeTopic } from "./topic-text.ts";
 
 export interface NamingRequest {
   branch: readonly BranchEntry[];
+  /** Tried last when nothing else resolves: the primary conversation model. */
+  fallback?: Model<Api>;
   getSessionName(): string | undefined;
   /** Primary conversation model id; it becomes the name prefix. */
   modelId: string | undefined;
@@ -28,18 +38,31 @@ export interface NamingRequest {
   setSessionName(name: string): void;
 }
 
+export type NamingFailureReason =
+  | "no-primary-model"
+  | "no-topic-model"
+  | "topic-error"
+  | "topic-timeout"
+  | "topic-empty"
+  | "topic-rejected"
+  | "error";
+
 export type NamingOutcome =
   | {
-      status: "named";
+      /** The candidate that actually answered, as `provider/id`. */
+      model: string;
       name: string;
+      status: "named";
     }
   | {
-      status: "skipped";
       reason: "in-flight" | "already-named" | "not-eligible";
+      status: "skipped";
     }
   | {
+      /** Provider error text only; never prompt or topic text. */
+      detail?: string;
+      reason: NamingFailureReason;
       status: "failed";
-      reason: "no-primary-model" | "no-topic" | "error";
     };
 
 export type MaybeNameSession = (request: NamingRequest) => Promise<NamingOutcome>;
@@ -80,17 +103,21 @@ export function createNamer(): MaybeNameSession {
 
     inFlight = true;
     try {
-      const raw = await generateTopic(
+      const generated = await generateTopic(
         request.registry,
         topicContext(buildTopicPrompt(userTexts)),
         {
+          fallback: request.fallback,
           preference: request.preference,
         },
       );
-      const topic = raw === undefined ? undefined : normalizeTopic(raw);
+      if (!generated.ok) {
+        return failedOutcome(generated.failure);
+      }
+      const topic = normalizeTopic(generated.text);
       if (topic === undefined) {
         return {
-          reason: "no-topic",
+          reason: "topic-rejected",
           status: "failed",
         };
       }
@@ -109,8 +136,9 @@ export function createNamer(): MaybeNameSession {
       }
       request.setSessionName(name);
       return {
-        status: "named",
+        model: generated.model,
         name,
+        status: "named",
       };
     } catch {
       return {
@@ -121,6 +149,37 @@ export function createNamer(): MaybeNameSession {
       inFlight = false;
     }
   };
+}
+
+function failedOutcome(failure: TopicFailure): NamingOutcome {
+  switch (failure.kind) {
+    case "no-model":
+      return {
+        reason: "no-topic-model",
+        status: "failed",
+      };
+    case "provider-error":
+      return failure.detail.length > 0
+        ? {
+            detail: failure.detail,
+            reason: "topic-error",
+            status: "failed",
+          }
+        : {
+            reason: "topic-error",
+            status: "failed",
+          };
+    case "timeout":
+      return {
+        reason: "topic-timeout",
+        status: "failed",
+      };
+    case "empty":
+      return {
+        reason: "topic-empty",
+        status: "failed",
+      };
+  }
 }
 
 function topicContext(prompt: string): Context {

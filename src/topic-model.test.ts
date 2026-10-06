@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   generateTopic,
+  resolveTopicCandidates,
   resolveTopicModel,
   TOPIC_MAX_CHARS,
   TOPIC_MODEL_ID,
@@ -241,7 +242,11 @@ describe("resolveTopicModel with a stored preference", () => {
 describe("generateTopic", () => {
   it("returns the topic from a representative conversation context", async () => {
     const { calls, registry } = createRegistry({});
-    await expect(generateTopic(registry, CONTEXT)).resolves.toBe("登录失败排查");
+    await expect(generateTopic(registry, CONTEXT)).resolves.toMatchObject({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
+      ok: true,
+      text: "登录失败排查",
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0].model.id).toBe(TOPIC_MODEL_ID);
     expect(calls[0].model.provider).toBe("MIMO");
@@ -252,11 +257,13 @@ describe("generateTopic", () => {
     const { registry } = createRegistry({
       respond: () => fauxAssistantMessage(long),
     });
-    const topic = await generateTopic(registry, CONTEXT);
+    const result = await generateTopic(registry, CONTEXT);
+    const topic = result.ok ? result.text : "";
+    expect(result.ok).toBe(true);
     expect([
-      ...(topic ?? ""),
+      ...topic,
     ]).toHaveLength(TOPIC_MAX_CHARS);
-    expect(long.startsWith(topic ?? "")).toBe(true);
+    expect(long.startsWith(topic)).toBe(true);
   });
 
   it("routes the request to the topic model and leaves the primary model untouched", async () => {
@@ -278,7 +285,12 @@ describe("generateTopic", () => {
         "CMD-PRO",
       ],
     });
-    await expect(generateTopic(registry, CONTEXT)).resolves.toBeUndefined();
+    await expect(generateTopic(registry, CONTEXT)).resolves.toEqual({
+      ok: false,
+      failure: {
+        kind: "no-model",
+      },
+    });
     expect(calls).toHaveLength(0);
   });
 
@@ -290,7 +302,13 @@ describe("generateTopic", () => {
           stopReason: "error",
         }),
     });
-    await expect(generateTopic(registry, CONTEXT)).resolves.toBeUndefined();
+    await expect(generateTopic(registry, CONTEXT)).resolves.toEqual({
+      ok: false,
+      failure: {
+        detail: "boom",
+        kind: "provider-error",
+      },
+    });
   });
 
   it("aborts the request signal and returns undefined when cancelled", async () => {
@@ -306,8 +324,139 @@ describe("generateTopic", () => {
       generateTopic(registry, CONTEXT, {
         signal: controller.signal,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      ok: false,
+      failure: {
+        kind: "timeout",
+      },
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0].signal?.aborted).toBe(true);
+  });
+});
+
+describe("resolveTopicCandidates", () => {
+  const CHOSEN = {
+    id: "deepseek-v4.1-flash",
+    provider: "CMD-PRO",
+  };
+  const CATALOGUE = [
+    CHOSEN,
+    {
+      id: TOPIC_MODEL_ID,
+      provider: "MIMO",
+    },
+  ];
+
+  it("orders the preference, the default chain, and the fallback", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+    const fallback = Object.assign({}, fauxProvider().models[0], {
+      id: "fallback-model",
+      provider: "FALLBACK",
+    }) as Model<Api>;
+
+    expect(
+      resolveTopicCandidates(registry, {
+        fallback,
+        preference: CHOSEN,
+      }).map((model) => `${model.provider}/${model.id}`),
+    ).toEqual([
+      "CMD-PRO/deepseek-v4.1-flash",
+      `MIMO/${TOPIC_MODEL_ID}`,
+      "FALLBACK/fallback-model",
+    ]);
+  });
+
+  it("skips a stored preference whose provider has no auth", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "MIMO",
+    ]);
+
+    expect(
+      resolveTopicCandidates(registry, {
+        preference: CHOSEN,
+      }).map((model) => model.provider),
+    ).toEqual([
+      "MIMO",
+    ]);
+  });
+
+  it("lists a duplicated fallback once", () => {
+    const { registry } = multiModelRegistry(CATALOGUE, [
+      "CMD-PRO",
+      "MIMO",
+    ]);
+    const candidates = resolveTopicCandidates(registry, {
+      fallback: Object.assign({}, fauxProvider().models[0], CHOSEN) as Model<Api>,
+      preference: CHOSEN,
+    });
+
+    expect(
+      candidates.filter(
+        (model) => `${model.provider}/${model.id}` === "CMD-PRO/deepseek-v4.1-flash",
+      ),
+    ).toHaveLength(1);
+    expect(candidates).toHaveLength(2);
+  });
+});
+
+describe("generateTopic with candidates", () => {
+  it("retries the next candidate after the provider refuses the first", async () => {
+    const fallback = Object.assign({}, fauxProvider().models[0], {
+      id: "deepseek-v4.1-flash",
+      provider: "CMD-PRO",
+    }) as Model<Api>;
+    const { calls, registry } = createRegistry({
+      respond: (model) =>
+        model.provider === fallback.provider
+          ? fauxAssistantMessage("登录失败排查")
+          : fauxAssistantMessage("", {
+              errorMessage: "Space Bunny Alpha is no longer available",
+              stopReason: "error",
+            }),
+    });
+
+    await expect(
+      generateTopic(registry, CONTEXT, {
+        fallback,
+      }),
+    ).resolves.toEqual({
+      model: `CMD-PRO/${fallback.id}`,
+      ok: true,
+      text: "登录失败排查",
+    });
+    expect(calls.map((call) => call.model.provider)).toEqual([
+      "MIMO",
+      "CMD-PRO",
+    ]);
+  });
+
+  it("reports the best candidate's provider error when every candidate fails", async () => {
+    const fallback = Object.assign({}, fauxProvider().models[0], {
+      id: "fallback-model",
+      provider: "FALLBACK",
+    }) as Model<Api>;
+    const { registry } = createRegistry({
+      respond: () =>
+        fauxAssistantMessage("", {
+          errorMessage: "provider refused this model",
+          stopReason: "error",
+        }),
+    });
+
+    await expect(
+      generateTopic(registry, CONTEXT, {
+        fallback,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      failure: {
+        detail: "provider refused this model",
+        kind: "provider-error",
+      },
+    });
   });
 });

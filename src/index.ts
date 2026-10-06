@@ -4,7 +4,11 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { createNamer, type NamingOutcome } from "./naming-run.ts";
+import {
+  createNamer,
+  type NamingFailureReason,
+  type NamingOutcome,
+} from "./naming-run.ts";
 import { resolveTopicModel } from "./topic-model.ts";
 import { readTopicModelConfig, writeTopicModelConfig } from "./topic-model-config.ts";
 import { ModelPicker, modelLabel } from "./ui/model-picker.ts";
@@ -14,6 +18,9 @@ const MODEL_COMMAND = "xpi-session-naming-model";
 const MODELS_SUBCOMMAND = "models";
 export default function xpiSessionNaming(pi: ExtensionAPI): void {
   const maybeNameSession = createNamer();
+  // `agent_settled` fires every turn, so an unrecoverable failure would repeat
+  // its warning forever; each failure kind is reported at most once per session.
+  const reportedFailures = new Set<NamingFailureReason>();
 
   pi.registerCommand("xpi-session-naming", {
     description: "Show xpi-session-naming status; `models` picks the naming model",
@@ -59,6 +66,7 @@ export default function xpiSessionNaming(pi: ExtensionAPI): void {
       const { preference } = await readTopicModelConfig();
       const outcome = await maybeNameSession({
         branch: ctx.sessionManager.getBranch(),
+        fallback: ctx.model,
         modelId: ctx.model?.id,
         preference,
         registry: ctx.modelRegistry,
@@ -67,7 +75,7 @@ export default function xpiSessionNaming(pi: ExtensionAPI): void {
           pi.setSessionName(name);
         },
       });
-      notifyFailure(ctx, outcome);
+      reportFailure(ctx, outcome, reportedFailures);
     } catch {
       // Scheduling a name must never disturb the conversation.
     }
@@ -132,16 +140,43 @@ function pickableModels(ctx: ExtensionContext): Model<Api>[] {
     : ctx.modelRegistry.getAvailable();
 }
 
-/** Naming failures are reported without prompt or topic text. */
-function notifyFailure(ctx: ExtensionContext, outcome: NamingOutcome): void {
-  if (outcome.status !== "failed" || !ctx.hasUI) {
+/**
+ * Reports a failed attempt once per failure kind, naming the cause. No prompt or
+ * topic text is ever included: the only quoted text is the provider's own error.
+ */
+function reportFailure(
+  ctx: ExtensionContext,
+  outcome: NamingOutcome,
+  reported: Set<NamingFailureReason>,
+): void {
+  if (outcome.status === "named") {
+    reported.clear();
     return;
   }
-  ctx.ui.notify(
-    outcome.reason === "no-primary-model"
-      ? // biome-ignore lint/security/noSecrets: user-facing message, not a credential
-        "当前模型信息不可用，未自动命名本次会话"
-      : "自动命名会话失败，会话名保持不变",
-    "warning",
-  );
+  if (outcome.status !== "failed" || !ctx.hasUI || reported.has(outcome.reason)) {
+    return;
+  }
+  reported.add(outcome.reason);
+  ctx.ui.notify(failureText(outcome.reason, outcome.detail), "warning");
+}
+
+/** One line per cause, so the message says what to change. */
+function failureText(reason: NamingFailureReason, detail?: string): string {
+  switch (reason) {
+    case "no-primary-model":
+      return "当前模型信息不可用，会话名保持不变";
+    case "no-topic-model":
+      return "没有可用的命名模型，运行 /xpi-session-naming models 选择";
+    case "topic-error":
+      return detail === undefined ? "命名模型调用失败" : `命名模型调用失败：${detail}`;
+    case "topic-timeout":
+      return "命名模型 15 秒未响应";
+    case "topic-empty":
+      return "命名模型没有返回内容";
+    case "topic-rejected":
+      return "命名模型返回的内容不能用作名字";
+    case "error":
+      // biome-ignore lint/security/noSecrets: user-facing message, not a credential
+      return "命名过程遇到意外错误，会话名保持不变";
+  }
 }

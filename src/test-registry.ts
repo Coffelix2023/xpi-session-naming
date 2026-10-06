@@ -36,6 +36,8 @@ export function fakeRegistry(
     };
     throwOnResolve?: boolean;
     topic?: string;
+    /** Per-model response; defaults to a canned topic. */
+    respond?: (model: Model<string>) => AssistantMessage;
   } = {},
 ): {
   registry: TopicModelRegistry;
@@ -89,7 +91,10 @@ export function fakeRegistry(
       hasConfiguredAuth: () => available,
       streamSimple: (model) => {
         requested.push(model.id);
-        return ready(fauxAssistantMessage(options.topic ?? DEFAULT_TOPIC));
+        return ready(
+          options.respond?.(model) ??
+            fauxAssistantMessage(options.topic ?? DEFAULT_TOPIC),
+        );
       },
     },
   };
