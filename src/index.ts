@@ -14,7 +14,7 @@ import { resolveTopicModel } from "./topic-model.ts";
 import { readTopicModelConfig, writeTopicModelConfig } from "./topic-model-config.ts";
 import { ModelPicker, modelLabel } from "./ui/model-picker.ts";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const MODEL_COMMAND = "xpi-session-naming-model";
 const MODELS_SUBCOMMAND = "models";
 const RENAME_COMMAND = "xpi-session-rename";
