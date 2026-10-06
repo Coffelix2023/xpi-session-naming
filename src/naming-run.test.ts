@@ -382,4 +382,99 @@ describe("createNamer", () => {
       status: "failed",
     });
   });
+
+  it("overwrites an existing name for a manual request", async () => {
+    const { registry, requested } = fakeRegistry({
+      topic: "手动重命名会话",
+    });
+    const names: string[] = [];
+
+    const outcome = await createNamer()(
+      request({
+        manual: true,
+        getSessionName: () => "旧名字",
+        registry,
+        setSessionName: (name) => names.push(name),
+      }),
+    );
+
+    expect(outcome).toEqual({
+      model: `MIMO/${TOPIC_MODEL_ID}`,
+      name: `[${PRIMARY_MODEL_ID}] - 手动重命名会话`,
+      status: "named",
+    });
+    expect(names).toEqual([
+      `[${PRIMARY_MODEL_ID}] - 手动重命名会话`,
+    ]);
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
+    ]);
+  });
+
+  it("summarizes the newest messages for a manual request", async () => {
+    const { contexts, registry } = fakeRegistry({
+      topic: "手动重命名会话",
+    });
+    const turns = [
+      "第一条很早的消息",
+      "第二条很早的消息",
+      "第三条很早的消息",
+      "最新的一条消息",
+    ];
+    const branch = turns.flatMap((text, index) => [
+      userEntry(`u${index}`, text),
+      assistantEntry(`a${index}`),
+    ]);
+
+    await createNamer()(
+      request({
+        branch,
+        manual: true,
+        registry,
+      }),
+    );
+
+    const prompt = JSON.stringify(contexts[0]);
+    // The newest three are the topic; the oldest turn is left out.
+    expect(prompt).not.toContain("第一条很早的消息");
+    expect(prompt).toContain("第二条很早的消息");
+    expect(prompt).toContain("最新的一条消息");
+  });
+
+  it("skips the eligibility gate for a manual request", async () => {
+    const { registry } = fakeRegistry({
+      topic: "手动重命名会话",
+    });
+
+    const outcome = await createNamer()(
+      request({
+        manual: true,
+        branch: [
+          userEntry("u1", "hello"),
+          assistantEntry("a1"),
+        ],
+        registry,
+      }),
+    );
+
+    expect(outcome.status).toBe("named");
+  });
+
+  it("fails without context when a manual request has no completed message", async () => {
+    const { registry, requested } = fakeRegistry();
+
+    const outcome = await createNamer()(
+      request({
+        branch: [],
+        manual: true,
+        registry,
+      }),
+    );
+
+    expect(outcome).toEqual({
+      reason: "no-context",
+      status: "failed",
+    });
+    expect(requested).toEqual([]);
+  });
 });

@@ -10,6 +10,8 @@
 export const TOPIC_MAX_LENGTH = 30;
 /** Relevant user messages sent to the topic model: the first and the second. */
 export const MAX_CONTEXT_MESSAGES = 2;
+/** Manual rename reads the newest messages instead, so a long session still has a topic. */
+export const MANUAL_CONTEXT_MESSAGES = 3;
 /** Per-message bound, in code points, so a pasted blob cannot dominate the prompt. */
 export const MAX_CONTEXT_CHARS = 500;
 
@@ -30,13 +32,16 @@ const LIST_PREFIX = /^[-+]\s|^\d+[.)、]/;
 const WRAPPING = /^[\s"'“”‘’「」`*#]+|[\s"'“”‘’「」`*#]+$/g;
 
 /**
- * Only the first `MAX_CONTEXT_MESSAGES` completed user messages are relevant:
- * naming is decided on the first turn, or on the second when the first was
- * trivial, so later turns never change the topic.
+/**
+ * The caller decides which messages are relevant: the automatic path passes the
+ * first completed turns, a manual rename passes the newest ones.
  */
-export function buildTopicPrompt(userTexts: readonly string[]): string {
+export function buildTopicPrompt(
+  userTexts: readonly string[],
+  limit = MAX_CONTEXT_MESSAGES,
+): string {
   const relevant = userTexts
-    .slice(0, MAX_CONTEXT_MESSAGES)
+    .slice(0, limit)
     .map(boundContext)
     .filter((text) => text.length > 0);
   if (relevant.length === 0) {

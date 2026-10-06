@@ -5,6 +5,7 @@
 import {
   type AssistantMessage,
   type AssistantMessageEventStream,
+  type Context,
   fauxAssistantMessage,
   fauxProvider,
   type Model,
@@ -40,6 +41,7 @@ export function fakeRegistry(
     respond?: (model: Model<string>) => AssistantMessage;
   } = {},
 ): {
+  contexts: Context[];
   registry: TopicModelRegistry;
   requested: string[];
 } {
@@ -70,8 +72,10 @@ export function fakeRegistry(
         provider: entry.provider,
       }) as Model<string>,
   );
+  const contexts: Context[] = [];
   const requested: string[] = [];
   return {
+    contexts,
     requested,
     registry: {
       find: (provider, modelId) => {
@@ -89,8 +93,9 @@ export function fakeRegistry(
         return available ? models : [];
       },
       hasConfiguredAuth: () => available,
-      streamSimple: (model) => {
+      streamSimple: (model, context) => {
         requested.push(model.id);
+        contexts.push(context);
         return ready(
           options.respond?.(model) ??
             fauxAssistantMessage(options.topic ?? DEFAULT_TOPIC),

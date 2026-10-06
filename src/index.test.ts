@@ -190,11 +190,12 @@ describe("xpiSessionNaming wiring", () => {
     ]);
   });
 
-  it("registers the status command and the naming-model command", () => {
+  it("registers the status, naming-model, and rename commands", () => {
     const pi = load();
     expect(pi.commands).toEqual([
       "xpi-session-naming",
       "xpi-session-naming-model",
+      "xpi-session-rename",
     ]);
   });
 
@@ -465,6 +466,78 @@ describe("xpiSessionNaming wiring", () => {
     expect(ctx.notifies).toEqual([
       {
         message: "当前模型信息不可用，会话名保持不变",
+        type: "warning",
+      },
+    ]);
+  });
+
+  it("sets an explicit name without spending a model call", async () => {
+    const pi = load();
+    const { registry, requested } = fakeRegistry();
+    const ctx = mockCtx({
+      modelId: PRIMARY_MODEL_ID,
+      registry,
+    });
+
+    await pi.command("xpi-session-rename")("  我的新会话名  ", ctx);
+
+    expect(pi.sessionName()).toBe("我的新会话名");
+    expect(ctx.notifies).toEqual([
+      {
+        message: "会话已重命名为 我的新会话名",
+        type: "info",
+      },
+    ]);
+    expect(requested).toEqual([]);
+  });
+
+  it("renames from the newest messages and overwrites an existing name", async () => {
+    useAgentDir();
+    const pi = load();
+    pi.api.setSessionName("旧名字");
+    const { registry, requested } = fakeRegistry({
+      topic: "手动重命名会话",
+    });
+    const ctx = mockCtx({
+      modelId: PRIMARY_MODEL_ID,
+      branch: [
+        userEntry("u1", MEANINGFUL_REQUEST),
+        assistantEntry("a1"),
+        userEntry("u2", MEANINGFUL_REQUEST),
+        assistantEntry("a2"),
+      ],
+      registry,
+    });
+
+    await pi.command("xpi-session-rename")("", ctx);
+
+    expect(pi.sessionName()).toBe(`[${PRIMARY_MODEL_ID}] - 手动重命名会话`);
+    expect(ctx.notifies).toEqual([
+      {
+        message: `会话已重命名为 [${PRIMARY_MODEL_ID}] - 手动重命名会话`,
+        type: "info",
+      },
+    ]);
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
+    ]);
+  });
+
+  it("reports missing context when the session has no completed user message", async () => {
+    useAgentDir();
+    const pi = load();
+    const ctx = mockCtx({
+      branch: [],
+      modelId: PRIMARY_MODEL_ID,
+    });
+
+    await pi.command("xpi-session-rename")("", ctx);
+
+    expect(pi.sessionName()).toBeUndefined();
+    expect(ctx.notifies).toEqual([
+      {
+        // biome-ignore lint/security/noSecrets: user-facing message, not a credential
+        message: "没有可用的用户消息，会话名保持不变",
         type: "warning",
       },
     ]);

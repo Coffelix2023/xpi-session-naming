@@ -9,6 +9,10 @@
  * Failures are returned with their cause, never thrown, and the only text a
  * failure carries is the provider's own error message — never prompt or topic
  * text.
+ *
+ * A manual request (`manual: true`) is the user's own command, not a scheduled
+ * best effort: it overwrites any existing name, skips the eligibility gate, and
+ * reads the newest completed messages instead of the first ones.
  */
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import {
@@ -23,13 +27,23 @@ import {
   type TopicModelRegistry,
 } from "./topic-model.ts";
 import type { TopicModelPreference } from "./topic-model-config.ts";
-import { buildTopicPrompt, normalizeTopic } from "./topic-text.ts";
+import {
+  buildTopicPrompt,
+  MANUAL_CONTEXT_MESSAGES,
+  MAX_CONTEXT_MESSAGES,
+  normalizeTopic,
+} from "./topic-text.ts";
 
 export interface NamingRequest {
   branch: readonly BranchEntry[];
   /** Tried last when nothing else resolves: the primary conversation model. */
   fallback?: Model<Api>;
   getSessionName(): string | undefined;
+  /**
+   * Manual rename: overwrite the existing name, skip the eligibility gate, and
+   * summarize the newest completed messages instead of the first ones.
+   */
+  manual?: boolean;
   /** Primary conversation model id; it becomes the name prefix. */
   modelId: string | undefined;
   /** Chosen by `/xpi-session-naming-model`; absent means the default chain. */
@@ -39,6 +53,7 @@ export interface NamingRequest {
 }
 
 export type NamingFailureReason =
+  | "no-context"
   | "no-primary-model"
   | "no-topic-model"
   | "topic-error"
@@ -79,14 +94,24 @@ export function createNamer(): MaybeNameSession {
         status: "skipped",
       };
     }
-    if (request.getSessionName() !== undefined) {
+    const manual = request.manual === true;
+    // The automatic path never overwrites a name; the user's own command always may.
+    if (!manual && request.getSessionName() !== undefined) {
       return {
         reason: "already-named",
         status: "skipped",
       };
     }
     const userTexts = completedUserTexts(request.branch);
-    if (!namingDecision(userTexts).eligible) {
+    if (manual) {
+      // An explicit rename needs any completed message; the newest ones are the topic.
+      if (userTexts.length === 0) {
+        return {
+          reason: "no-context",
+          status: "failed",
+        };
+      }
+    } else if (!namingDecision(userTexts).eligible) {
       return {
         reason: "not-eligible",
         status: "skipped",
@@ -103,9 +128,12 @@ export function createNamer(): MaybeNameSession {
 
     inFlight = true;
     try {
+      const limit = manual ? MANUAL_CONTEXT_MESSAGES : MAX_CONTEXT_MESSAGES;
       const generated = await generateTopic(
         request.registry,
-        topicContext(buildTopicPrompt(userTexts)),
+        topicContext(
+          buildTopicPrompt(manual ? userTexts.slice(-limit) : userTexts, limit),
+        ),
         {
           fallback: request.fallback,
           preference: request.preference,
@@ -128,7 +156,7 @@ export function createNamer(): MaybeNameSession {
           status: "failed",
         };
       }
-      if (request.getSessionName() !== undefined) {
+      if (!manual && request.getSessionName() !== undefined) {
         return {
           reason: "already-named",
           status: "skipped",

@@ -107,6 +107,17 @@ describe("buildTopicPrompt", () => {
     expect(prompt).not.toContain("third-turn");
   });
 
+  it("honors an explicit limit instead of the automatic default", () => {
+    const prompt = buildTopicPrompt(
+      [
+        "first-turn",
+        "second-turn",
+        "third-turn",
+      ],
+      3,
+    );
+    expect(prompt).toContain("third-turn");
+  });
   it("collapses message whitespace so the prompt keeps its shape", () => {
     const prompt = buildTopicPrompt([
       "\n 帮我看看\n 登录失败 \n",
