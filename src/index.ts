@@ -170,6 +170,8 @@ async function renameSession(
     if (diagnostic) {
       ctx.ui.notify(diagnostic, "warning");
     }
+    // Naming takes a few seconds; say so instead of staying silent until it lands.
+    ctx.ui.notify("正在生成会话名…", "info");
     const outcome = await maybeNameSession({
       branch: ctx.sessionManager.getBranch(),
       fallback: ctx.model,
@@ -201,8 +203,23 @@ function reportRename(ctx: ExtensionCommandContext, outcome: NamingOutcome): voi
     ctx.ui.notify(failureText(outcome.reason, outcome.detail), "warning");
     return;
   }
-  if (outcome.reason === "in-flight") {
-    ctx.ui.notify("命名请求进行中，请稍后重试", "warning");
+  // A user-issued command never ends silently, whatever the skip reason.
+  ctx.ui.notify(renameSkipText(outcome.reason), "warning");
+}
+
+/** Skips only a user-issued command can reach; each says why nothing changed. */
+function renameSkipText(
+  reason: "in-flight" | "already-named" | "not-eligible",
+): string {
+  switch (reason) {
+    case "in-flight":
+      // biome-ignore lint/security/noSecrets: user-facing message, not a credential
+      return "上一次命名请求仍在进行，请稍后重试";
+    case "already-named":
+      return "会话名未改变";
+    case "not-eligible":
+      // biome-ignore lint/security/noSecrets: user-facing message, not a credential
+      return "没有可用的对话内容，会话名保持不变";
   }
 }
 

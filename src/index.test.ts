@@ -514,6 +514,10 @@ describe("xpiSessionNaming wiring", () => {
     expect(pi.sessionName()).toBe(`[${PRIMARY_MODEL_ID}] - 手动重命名会话`);
     expect(ctx.notifies).toEqual([
       {
+        message: "正在生成会话名…",
+        type: "info",
+      },
+      {
         message: `会话已重命名为 [${PRIMARY_MODEL_ID}] - 手动重命名会话`,
         type: "info",
       },
@@ -535,6 +539,10 @@ describe("xpiSessionNaming wiring", () => {
 
     expect(pi.sessionName()).toBeUndefined();
     expect(ctx.notifies).toEqual([
+      {
+        message: "正在生成会话名…",
+        type: "info",
+      },
       {
         // biome-ignore lint/security/noSecrets: user-facing message, not a credential
         message: "没有可用的用户消息，会话名保持不变",
