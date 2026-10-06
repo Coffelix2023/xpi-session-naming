@@ -61,6 +61,7 @@
       "!**/.next",
       "!**/dist",
       "!**/build",
+      "!**/.vitest",
       "!**/backend",
       "!**/__fixtures__",
       "!src/components/ui", //排除 shadcn-ui

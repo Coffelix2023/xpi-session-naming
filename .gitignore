@@ -11,6 +11,7 @@ dist/
 __pycache__/
 .venv/
 coverage/
+.vitest/
 
 # c6x-config
 **/fast-fixes/
