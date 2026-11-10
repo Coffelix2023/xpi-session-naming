@@ -84,7 +84,7 @@ export type MaybeNameSession = (request: NamingRequest) => Promise<NamingOutcome
 
 export function createNamer(): MaybeNameSession {
   let inFlight = false;
-  // A previous automatic attempt spent a topic request and failed: the next
+  // The last automatic attempt spent a topic request and failed: the next
   // turn retries from the newest completed turns instead of re-sending the
   // identical first-turns prompt that just failed.
   let lastAutoFailed = false;
@@ -129,7 +129,7 @@ export function createNamer(): MaybeNameSession {
       };
     }
 
-    // A previous automatic attempt spent a topic request and failed: the next
+    // The last automatic attempt spent a topic request and failed: the next
     // turn retries from the newest completed turns instead of re-sending the
     // identical first-turns prompt that just failed. Snapshot before marking:
     // short sessions are unaffected (both slices are the whole list when
@@ -175,6 +175,8 @@ export function createNamer(): MaybeNameSession {
           status: "skipped",
         };
       }
+      // The session is named: a later round starts fresh from the oldest turns.
+      lastAutoFailed = false;
       request.setSessionName(name);
       return {
         model: generated.model,

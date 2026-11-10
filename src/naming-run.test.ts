@@ -534,4 +534,50 @@ describe("createNamer", () => {
       TOPIC_MODEL_ID,
     ]);
   });
+  it("starts a later round from the oldest turns after a naming succeeds", async () => {
+    let calls = 0;
+    const { contexts, registry } = fakeRegistry({
+      respond: () => {
+        calls += 1;
+        return calls === 1
+          ? fauxAssistantMessage("ok")
+          : fauxAssistantMessage("新进展情况");
+      },
+    });
+    const namer = createNamer();
+    const names: string[] = [];
+    const attempt = (branch: SessionEntry[]) =>
+      namer(
+        request({
+          branch,
+          registry,
+          setSessionName: (name) => names.push(name),
+        }),
+      );
+
+    const firstBranch = [
+      userEntry("u1", MEANINGFUL_REQUEST),
+      assistantEntry("a1"),
+    ];
+    expect((await attempt(firstBranch)).status).toBe("failed");
+
+    // The retry succeeds and names the session, clearing the failed state.
+    const secondBranch = [
+      ...firstBranch,
+      userEntry("u2", "补充一些日志内容"),
+      assistantEntry("a2"),
+    ];
+    expect((await attempt(secondBranch)).status).toBe("named");
+
+    // A later round starts fresh from the oldest turns again.
+    const thirdBranch = [
+      ...secondBranch,
+      userEntry("u3", "最新一步有了新进展"),
+      assistantEntry("a3"),
+    ];
+    expect((await attempt(thirdBranch)).status).toBe("named");
+    const freshPrompt = JSON.stringify(contexts[2]);
+    expect(freshPrompt).toContain(MEANINGFUL_REQUEST);
+    expect(freshPrompt).not.toContain("最新一步有了新进展");
+  });
 });
