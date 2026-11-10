@@ -4,8 +4,11 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "packageManager": "pnpm@12.9.1",
-  "keywords": ["pi-package", "pi-extension"],
+  "packageManager": "pnpm@12.16.1",
+  "keywords": [
+    "pi-package",
+    "pi-extension"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
@@ -23,17 +26,19 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
-    "@earendil-works/pi-ai": "^1.0.2",
-    "@earendil-works/pi-coding-agent": "^1.0.2",
-    "@earendil-works/pi-tui": "^1.0.2",
-    "@types/node": "^24.13.3",
-    "typebox": "^1.0.0",
+    "@biomejs/biome": "^2.6.6",
+    "@earendil-works/pi-ai": "^1.5.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "@earendil-works/pi-tui": "^1.5.0",
+    "@types/node": "^24.19.2",
+    "typebox": "^1.4.6",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.1.0"
   },
   "pi": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "scripts": {
     "lint": "biome check .",
