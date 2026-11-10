@@ -1,11 +1,14 @@
 {
   "name": "@fx-pi/xpi-session-naming",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "license": "MIT",
   "packageManager": "pnpm@12.16.1",
-  "keywords": ["pi-package", "pi-extension"],
+  "keywords": [
+    "pi-package",
+    "pi-extension"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
@@ -33,7 +36,9 @@
     "vitest": "^5.1.0"
   },
   "pi": {
-    "extensions": ["./src/index.ts"]
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "scripts": {
     "lint": "biome check .",

@@ -77,6 +77,8 @@ export interface ResolveTopicOptions {
   fallback?: Model<Api>;
   /** User-selected model; tried first when it resolves and has configured auth. */
   preference?: TopicModelPreference;
+  /** Session id for providers that require session-aware routing (e.g. OpenCode). */
+  sessionId?: string;
 }
 
 export interface GenerateTopicOptions extends ResolveTopicOptions {
@@ -202,6 +204,7 @@ async function attemptTopic(
   try {
     const message = await registry
       .streamSimple(model, context, {
+        sessionId: options.sessionId,
         signal,
       })
       .result();

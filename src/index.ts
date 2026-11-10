@@ -78,6 +78,7 @@ export default function xpiSessionNaming(pi: ExtensionAPI): void {
         modelId: ctx.model?.id,
         preference,
         registry: ctx.modelRegistry,
+        sessionId: ctx.sessionManager.getSessionId(),
         getSessionName: () => pi.getSessionName(),
         setSessionName: (name) => {
           pi.setSessionName(name);
@@ -180,6 +181,7 @@ async function renameSession(
       getSessionName: () => pi.getSessionName(),
       preference,
       registry: ctx.modelRegistry,
+      sessionId: ctx.sessionManager.getSessionId(),
       setSessionName: (next) => {
         pi.setSessionName(next);
       },

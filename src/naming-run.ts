@@ -49,6 +49,8 @@ export interface NamingRequest {
   /** Chosen by `/xpi-session-naming-model`; absent means the default chain. */
   preference?: TopicModelPreference;
   registry: TopicModelRegistry;
+  /** Session id for providers that require session-aware routing (e.g. OpenCode). */
+  sessionId?: string;
   setSessionName(name: string): void;
 }
 
@@ -150,6 +152,7 @@ export function createNamer(): MaybeNameSession {
         {
           fallback: request.fallback,
           preference: request.preference,
+          sessionId: request.sessionId,
         },
       );
       if (!generated.ok) {

@@ -121,6 +121,7 @@ function mockCtx(options: {
     scopedModels: [],
     sessionManager: {
       getBranch: () => options.branch ?? [],
+      getSessionId: () => "test-session",
     },
     ui: {
       custom: async () => options.pickedModel ?? null,
