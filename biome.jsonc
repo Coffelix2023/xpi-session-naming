@@ -150,24 +150,10 @@
         "noNodejsModules": "off"
       },
       "nursery": {
-        "useSortedClasses": {
+        "useTailwindSortedClasses": {
           //针对 tailwindcss的实例类排序
           "fix": "safe",
-          "level": "on",
-          "options": {
-            "attributes": [
-              "className",
-              "class"
-            ],
-            "functions": [
-              "cva",
-              "cx",
-              "clsx",
-              "cn",
-              "tw",
-              "tw.*"
-            ]
-          }
+          "level": "on"
         }
       },
       //安全防御

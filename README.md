@@ -40,9 +40,9 @@ Requires Pi `1.0.2` or newer, and a working Pi installation. The package is load
 pi install git:github.com/<owner>/xpi-session-naming@<ref>
 ```
 
-| Where | Command |
-| --- | --- |
-| Global (user settings) | `pi install git:github.com/<owner>/xpi-session-naming@<ref>` |
+| Where                                   | Command                                                         |
+| --------------------------------------- | --------------------------------------------------------------- |
+| Global (user settings)                  | `pi install git:github.com/<owner>/xpi-session-naming@<ref>`    |
 | This project only (`.pi/settings.json`) | `pi install -l git:github.com/<owner>/xpi-session-naming@<ref>` |
 
 `pi install` writes to `~/.pi/agent/settings.json`; `-l` writes to the project settings, which Pi installs automatically once the project is trusted. A pinned git ref is not moved by `pi update`.
@@ -57,12 +57,12 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 
 ## Usage
 
-| Command | Description |
-| --- | --- |
-| `/xpi-session-naming` | Show the extension status and the loaded version |
-| `/xpi-session-naming models` | Pick the model that names sessions, from the same list as `/model-name` |
-| `/xpi-session-naming-model` | Alias of `/xpi-session-naming models` |
-| `/xpi-session-rename` | Rename this session: `<name>` sets it directly, otherwise summarize the newest three user messages |
+| Command                      | Description                                                                                        |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `/xpi-session-naming`        | Show the extension status and the loaded version                                                   |
+| `/xpi-session-naming models` | Pick the model that names sessions, from the same list as `/model-name`                            |
+| `/xpi-session-naming-model`  | Alias of `/xpi-session-naming models`                                                              |
+| `/xpi-session-rename`        | Rename this session: `<name>` sets it directly, otherwise summarize the newest three user messages |
 
 ### How a session gets named
 
@@ -79,7 +79,12 @@ Reads: the current branch's message entries and the session name. Writes: the se
 `/xpi-session-naming models` writes `<agent-dir>/xpi-session-naming.json` (default `~/.pi/agent/xpi-session-naming.json`):
 
 ```json
-{ "topicModel": { "provider": "MIMO", "id": "mimo-v2.6-flash" } }
+{
+  "topicModel": {
+    "provider": "MIMO",
+    "id": "mimo-v2.6-flash"
+  }
+}
 ```
 
 A missing, unreadable, or malformed file means "no choice", and naming falls back to the default chain. The file holds a provider/model-id reference only — no credential ever lands there. The choice is re-read on every turn, so picking a model applies to the next turn without `/reload`.
@@ -91,11 +96,11 @@ mise install                         # pinned Node.js and pnpm
 pnpm install
 ```
 
-| Gate | Command |
-| --- | --- |
-| Types | `pnpm typecheck` — `tsc --noEmit` |
-| Lint and format | `pnpm -w run lint` — Biome across the repository |
-| Tests | `pnpm test` — Vitest (`vitest run --passWithNoTests`) |
+| Gate            | Command                                               |
+| --------------- | ----------------------------------------------------- |
+| Types           | `pnpm typecheck` — `tsc --noEmit`                     |
+| Lint and format | `pnpm -w run lint` — Biome across the repository      |
+| Tests           | `pnpm test` — Vitest (`vitest run --passWithNoTests`) |
 
 All three must pass before committing. Run `pnpm -w run lint` explicitly at the workspace root; the wrapper occasionally misreads a bare `pnpm run lint` as an unknown recursive command.
 

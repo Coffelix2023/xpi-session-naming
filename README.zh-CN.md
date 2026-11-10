@@ -41,9 +41,9 @@
 pi install git:github.com/<owner>/xpi-session-naming@<ref>
 ```
 
-| 安装位置 | 命令 |
-| --- | --- |
-| 全局(用户设置) | `pi install git:github.com/<owner>/xpi-session-naming@<ref>` |
+| 安装位置                        | 命令                                                            |
+| ------------------------------- | --------------------------------------------------------------- |
+| 全局(用户设置)                  | `pi install git:github.com/<owner>/xpi-session-naming@<ref>`    |
 | 仅当前项目(`.pi/settings.json`) | `pi install -l git:github.com/<owner>/xpi-session-naming@<ref>` |
 
 `pi install` 写入 `~/.pi/agent/settings.json`;加 `-l` 写入项目设置,项目被信任后 Pi 会自动安装。固定的 git ref 不会被 `pi update` 移动。
@@ -58,12 +58,12 @@ pi remove git:github.com/<owner>/xpi-session-naming
 
 ## 用法
 
-| 命令 | 说明 |
-| --- | --- |
-| `/xpi-session-naming` | 显示扩展状态与已加载的版本 |
-| `/xpi-session-naming models` | 选择给会话命名的模型, 列表与 `/model-name` 一致 |
-| `/xpi-session-naming-model` | `/xpi-session-naming models` 的别名 |
-| `/xpi-session-rename` | 重命名当前会话: 带 `<name>` 则直接设置, 否则摘要最近三条用户消息 |
+| 命令                         | 说明                                                             |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `/xpi-session-naming`        | 显示扩展状态与已加载的版本                                       |
+| `/xpi-session-naming models` | 选择给会话命名的模型, 列表与 `/model-name` 一致                  |
+| `/xpi-session-naming-model`  | `/xpi-session-naming models` 的别名                              |
+| `/xpi-session-rename`        | 重命名当前会话: 带 `<name>` 则直接设置, 否则摘要最近三条用户消息 |
 
 ### 会话如何被命名
 
@@ -80,7 +80,12 @@ pi remove git:github.com/<owner>/xpi-session-naming
 `/xpi-session-naming models` 写入 `<agent-dir>/xpi-session-naming.json`(默认 `~/.pi/agent/xpi-session-naming.json`):
 
 ```json
-{ "topicModel": { "provider": "MIMO", "id": "mimo-v2.6-flash" } }
+{
+  "topicModel": {
+    "provider": "MIMO",
+    "id": "mimo-v2.6-flash"
+  }
+}
 ```
 
 文件缺失、不可读或格式错误都视为「没有选择」, 命名回退默认链路。文件里只有 provider / 模型 id 的引用, 永远不落任何凭据。配置每回合重读, 因此选完模型下一回合即生效, 无需 `/reload`。
@@ -92,11 +97,11 @@ mise install                         # 安装锁定版本的 Node.js 与 pnpm
 pnpm install
 ```
 
-| 门禁 | 命令 |
-| --- | --- |
-| 类型 | `pnpm typecheck` —— `tsc --noEmit` |
-| Lint 与格式 | `pnpm -w run lint` —— Biome 全仓检查 |
-| 测试 | `pnpm test` —— Vitest(`vitest run --passWithNoTests`) |
+| 门禁        | 命令                                                  |
+| ----------- | ----------------------------------------------------- |
+| 类型        | `pnpm typecheck` —— `tsc --noEmit`                    |
+| Lint 与格式 | `pnpm -w run lint` —— Biome 全仓检查                  |
+| 测试        | `pnpm test` —— Vitest(`vitest run --passWithNoTests`) |
 
 提交前三条必须全绿。Lint 请在 workspace root 显式运行 `pnpm -w run lint`;包装层偶发会把裸写的 `pnpm run lint` 误判为未知递归命令。
 

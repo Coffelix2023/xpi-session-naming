@@ -63,5 +63,6 @@ pnpm test             # vitest run
 - **冒烟**:`pi -e ./src/index.ts`(quick test,不支持热载)。
 
 ## 6. Git 与回滚纪律
+
 - 只要任务碰到 git / GitHub / 远端仓库 / release，先读 `docs/GIT-WORKFLOW.md`，再读 `docs/GITHUB-GUARD.md`。
 - 默认不设分支, 以git安全流程提交检查点.
