@@ -619,4 +619,58 @@ describe("xpiSessionNaming wiring", () => {
     expect(pi.sessionName()).toBeUndefined();
     expect(ctx.notifies).toEqual([]);
   });
+  it("names on the next turn after a transient automatic failure", async () => {
+    useAgentDir();
+    const pi = load();
+    let calls = 0;
+    const { registry } = fakeRegistry({
+      respond: () => {
+        calls += 1;
+        // The provider fails every attempt of the first turn, then recovers:
+        // the first turn spends one call on the topic model and one on the
+        // primary-model fallback, so the first two calls fail.
+        return calls <= 2
+          ? fauxAssistantMessage("", {
+              errorMessage: "boom",
+              stopReason: "error",
+            })
+          : fauxAssistantMessage("登录失败排查");
+      },
+    });
+    const firstBranch = [
+      userEntry("u1", MEANINGFUL_REQUEST),
+      assistantEntry("a1"),
+    ];
+    const firstCtx = mockCtx({
+      branch: firstBranch,
+      modelId: PRIMARY_MODEL_ID,
+      registry,
+    });
+    await pi.handler("agent_settled")(
+      {
+        type: "agent_settled",
+      },
+      firstCtx,
+    );
+    expect(pi.sessionName()).toBeUndefined();
+    expect(firstCtx.notifies).toHaveLength(1);
+    expect(firstCtx.notifies[0]?.message).toContain("boom");
+
+    const secondCtx = mockCtx({
+      modelId: PRIMARY_MODEL_ID,
+      branch: [
+        ...firstBranch,
+        userEntry("u2", "补充一些日志内容"),
+        assistantEntry("a2"),
+      ],
+      registry,
+    });
+    await pi.handler("agent_settled")(
+      {
+        type: "agent_settled",
+      },
+      secondCtx,
+    );
+    expect(pi.sessionName()).toBe(`[${PRIMARY_MODEL_ID}] - 登录失败排查`);
+  });
 });

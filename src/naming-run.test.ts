@@ -477,4 +477,61 @@ describe("createNamer", () => {
     });
     expect(requested).toEqual([]);
   });
+  it("retries a failed automatic attempt from the newest turns", async () => {
+    let calls = 0;
+    const { contexts, registry, requested } = fakeRegistry({
+      respond: () => {
+        calls += 1;
+        // The first attempt answers with unusable text; the retry answers.
+        return calls === 1
+          ? fauxAssistantMessage("ok")
+          : fauxAssistantMessage("新进展情况");
+      },
+    });
+    const namer = createNamer();
+    const names: string[] = [];
+    const firstBranch = [
+      userEntry("u1", MEANINGFUL_REQUEST),
+      assistantEntry("a1"),
+      userEntry("u2", "补充一些日志内容"),
+      assistantEntry("a2"),
+    ];
+
+    const failed = await namer(
+      request({
+        branch: firstBranch,
+        registry,
+        setSessionName: (name) => names.push(name),
+      }),
+    );
+    expect(failed).toEqual({
+      reason: "topic-rejected",
+      status: "failed",
+    });
+
+    const named = await namer(
+      request({
+        branch: [
+          ...firstBranch,
+          userEntry("u3", "最新一步有了新进展"),
+          assistantEntry("a3"),
+        ],
+        registry,
+        setSessionName: (name) => names.push(name),
+      }),
+    );
+    expect(named.status).toBe("named");
+    expect(names).toEqual([
+      `[${PRIMARY_MODEL_ID}] - 新进展情况`,
+    ]);
+
+    // The retry re-prompts from the newest turns, not the failed first turns.
+    const retryPrompt = JSON.stringify(contexts[1]);
+    expect(retryPrompt).not.toContain(MEANINGFUL_REQUEST);
+    expect(retryPrompt).toContain("最新一步有了新进展");
+    expect(requested).toEqual([
+      TOPIC_MODEL_ID,
+      TOPIC_MODEL_ID,
+    ]);
+  });
 });

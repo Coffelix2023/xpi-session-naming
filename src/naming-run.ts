@@ -84,7 +84,10 @@ export type MaybeNameSession = (request: NamingRequest) => Promise<NamingOutcome
 
 export function createNamer(): MaybeNameSession {
   let inFlight = false;
-
+  // A previous automatic attempt spent a topic request and failed: the next
+  // turn retries from the newest completed turns instead of re-sending the
+  // identical first-turns prompt that just failed.
+  let lastAutoFailed = false;
   return async function maybeNameSession(
     request: NamingRequest,
   ): Promise<NamingOutcome> {
@@ -126,14 +129,24 @@ export function createNamer(): MaybeNameSession {
       };
     }
 
+    // A previous automatic attempt spent a topic request and failed: the next
+    // turn retries from the newest completed turns instead of re-sending the
+    // identical first-turns prompt that just failed. Snapshot before marking:
+    // short sessions are unaffected (both slices are the whole list when
+    // there are at most `limit` texts). Manual renames always read newest.
+    const retryFromLatest = !manual && lastAutoFailed;
     inFlight = true;
+    // A topic request is spent from here on, so an automatic run that does
+    // not end named leaves a failed attempt behind for the next turn.
+    if (!manual) {
+      lastAutoFailed = true;
+    }
     try {
       const limit = manual ? MANUAL_CONTEXT_MESSAGES : MAX_CONTEXT_MESSAGES;
+      const relevant = manual || retryFromLatest ? userTexts.slice(-limit) : userTexts;
       const generated = await generateTopic(
         request.registry,
-        topicContext(
-          buildTopicPrompt(manual ? userTexts.slice(-limit) : userTexts, limit),
-        ),
+        topicContext(buildTopicPrompt(relevant, limit)),
         {
           fallback: request.fallback,
           preference: request.preference,
