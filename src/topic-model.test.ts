@@ -78,6 +78,7 @@ function createRegistry(options: {
   );
   const calls: {
     model: Model<Api>;
+    sessionId: string | undefined;
     signal: AbortSignal | undefined;
   }[] = [];
 
@@ -89,6 +90,7 @@ function createRegistry(options: {
     streamSimple: (model, _context, streamOptions) => {
       calls.push({
         model,
+        sessionId: streamOptions?.sessionId,
         signal: streamOptions?.signal,
       });
       return streamOf(respond(model));
@@ -250,6 +252,18 @@ describe("generateTopic", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].model.id).toBe(TOPIC_MODEL_ID);
     expect(calls[0].model.provider).toBe("MIMO");
+  });
+
+  // Session-aware routing (OpenCode rejects a request without `x-opencode-session`)
+  // only gets the header when the registry receives the id.
+  it("passes the session id to the registry", async () => {
+    const { calls, registry } = createRegistry({});
+
+    await generateTopic(registry, CONTEXT, {
+      sessionId: "session-1",
+    });
+
+    expect(calls[0]?.sessionId).toBe("session-1");
   });
 
   it("bounds an overlong topic to TOPIC_MAX_CHARS code points", async () => {

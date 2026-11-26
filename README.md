@@ -27,14 +27,14 @@ It also stays inside its lane: an extension is a plugin loaded into the Pi main 
 ## Tech stack
 
 - [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/), versions pinned in [`mise.toml`](./mise.toml)
-- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.0.2` — the host, its extension API, and `@earendil-works/pi-tui`
+- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.6.1` — the host, its extension API, and `@earendil-works/pi-tui`
 - TypeScript strict (`target: ES2024`, `module: NodeNext`)
 - [Biome](https://biomejs.dev/) for lint and format
 - [Vitest](https://vitest.dev/) as the test runner
 
 ## Install
 
-Requires Pi `1.0.2` or newer, and a working Pi installation. The package is loaded straight from source, so there is nothing to build first. On older Pi releases the model picker does not compile, because 1.0.2 removed `TUI.queryTerminalBackgroundColor` and `TUI.queryTerminalColorScheme`.
+Requires Pi `1.6.1` or newer, and a working Pi installation. The package is loaded straight from source, so there is nothing to build first.
 
 ```bash
 pi install git:github.com/<owner>/xpi-session-naming@<ref>
@@ -69,7 +69,7 @@ Package-level debugging uses npm or git remote sources on purpose: a local-path 
 - **Trigger** — every completed user turn (`agent_settled`). A meaningful first turn (more than 10 code points, slash commands excluded) names the session immediately; a trivial first turn (`hello`, `/command`) waits for the second completed turn.
 - **Name format** — `[<primary-model-id>] - <topic>`. The provider prefix of the model id is stripped; the topic is a validated single-line Simplified Chinese phrase (requested ≤ 20 characters, accepted ≤ 30).
 - **Topic model** — candidates are tried in order: the model chosen with `/xpi-session-naming models`, then `mimo-v2.6-flash` on any configured provider, then the conversation's primary model as the last resort. 15s timeout per attempt, carrying only the first two user messages (500 code points each). A stored choice wins only while its provider still exists and has configured auth, and a candidate that fails only moves the attempt to the next one.
-- **Guards** — the automatic path never overwrites an existing name (checked before and after the model call); a manual `/xpi-session-rename` always may. Only one attempt runs at a time, and topic models are invoked through `ctx.modelRegistry.streamSimple()`, so generating a name can neither switch the conversation's model nor touch settings.
+- **Guards** — the automatic path never overwrites an existing name (checked before and after the model call); a manual `/xpi-session-rename` always may. Only one attempt runs at a time, and topic models are invoked through `ctx.modelRegistry.streamSimple()`, so generating a name can neither switch the conversation's model nor touch settings. The session id is passed along with each request, which is what lets session-aware endpoints (OpenCode accepts a request only with its `x-opencode-session` header) route the call at all.
 - **Failure boundary** — every failure is returned as data together with its cause — no usable model, a provider error, a timeout, an empty or unusable answer — and reported with one `ctx.ui.notify` warning per cause per session. The only text ever quoted is the provider's own error message; prompt and topic text never appear. A retryable failure points at `/xpi-session-rename`, which falls back to the conversation model. Unexpected exceptions are swallowed, and naming never blocks or alters the conversation.
 
 Reads: the current branch's message entries and the session name. Writes: the session name — only when there is none yet on the automatic path, and always for `/xpi-session-rename`.

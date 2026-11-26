@@ -28,14 +28,14 @@
 ## 技术栈
 
 - [Node.js](https://nodejs.org/) + [pnpm](https://pnpm.io/),版本锁定在 [`mise.toml`](./mise.toml)
-- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.0.2` —— 宿主本体、扩展 API 与 `@earendil-works/pi-tui`
+- [Pi Coding Agent](https://github.com/earendil-works/pi) `^1.6.1` —— 宿主本体、扩展 API 与 `@earendil-works/pi-tui`
 - TypeScript strict(`target: ES2024`,`module: NodeNext`)
 - [Biome](https://biomejs.dev/) 负责 lint 与格式化
 - [Vitest](https://vitest.dev/) 作为测试运行器
 
 ## 安装
 
-前置条件:Pi `1.0.2` 或更高版本,且已可用。本包直接从源码加载,安装前不需要任何构建。在更早的 Pi 版本上模型选型器无法通过类型检查 —— 1.0.2 移除了 `TUI.queryTerminalBackgroundColor` 与 `TUI.queryTerminalColorScheme`。
+前置条件:Pi `1.6.1` 或更高版本,且已可用。本包直接从源码加载,安装前不需要任何构建。
 
 ```bash
 pi install git:github.com/<owner>/xpi-session-naming@<ref>
@@ -70,7 +70,7 @@ pi remove git:github.com/<owner>/xpi-session-naming
 - **触发时机** —— 每个完成的用户回合(`agent_settled`)。首轮即是有意义的请求(超过 10 个码点, 排除斜杠命令)则立即命名; 首轮无意义(`hello`、`/command`)则等待第二个完成的回合。
 - **命名格式** —— `[<主模型 id>] - <主题>`。模型 id 前的 provider 前缀被去掉; 主题是校验过的单行简体中文短语(要求 ≤ 20 字, 接受 ≤ 30 字)。
 - **主题模型** —— 依次尝试候选: `/xpi-session-naming models` 选定的模型、任何已配置 provider 上的 `mimo-v2.6-flash`、最后是当前对话的主模型。每次尝试 15 秒超时, 只携带前两条用户消息(各 500 码点)。已保存的选择仅在其 provider 仍存在且已配置认证时生效; 某个候选失败只会把尝试交给下一个。
-- **护栏** —— 自动路径绝不覆盖已有名字(模型调用前后各检查一次); 用户手动执行 `/xpi-session-rename` 时始终可以覆盖。同一时刻只允许一次尝试; 主题模型经 `ctx.modelRegistry.streamSimple()` 调用, 生成名字既不会切换对话模型, 也不会改动设置。
+- **护栏** —— 自动路径绝不覆盖已有名字(模型调用前后各检查一次); 用户手动执行 `/xpi-session-rename` 时始终可以覆盖。同一时刻只允许一次尝试; 主题模型经 `ctx.modelRegistry.streamSimple()` 调用, 生成名字既不会切换对话模型, 也不会改动设置。每次请求都会带上会话 id —— 需要按会话路由的端点(OpenCode 只接受带 `x-opencode-session` 头的请求)才可能被正常转发。
 - **失败边界** —— 所有失败以数据形式连原因一起返回 —— 没有可用模型、provider 报错、超时、返回为空或不可用 —— 每个原因每会话只上报一条 `ctx.ui.notify` 警告。唯一会被引用的文本是 provider 自己的错误信息; 提示词与主题文本永不出现。可重试的失败会在警告里指向 `/xpi-session-rename`, 它会退回当前对话模型。意外异常被吞掉, 命名从不阻断、也从不改写对话。
 
 读取: 当前分支的消息条目与会话名。写入: 会话名 —— 自动路径仅在原本没有名字时写入, `/xpi-session-rename` 则总是写入。
